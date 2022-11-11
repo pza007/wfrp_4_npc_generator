@@ -1,0 +1,29 @@
+# Male, Female
+sex = Any
+
+# Human, Dwarf, Halfling, High Elf, Wood Elf, Gnome
+species = Any
+
+# Young, Middle, Old
+age = Any
+
+# Academic
+# 	Apothecary, Engineer, Lawyer, Nun, Physician, Priest, Scholar, Wizard
+# Burgher
+#	Agitator, Artisan, Beggar, Investigator, Merchant, Rat Catcher, Townsman, Watchman
+# Courtier
+#	Advisor, Artist, Duellist, Envoy, Noble, Servant, Spy, Warden
+# Peasant
+#	Bailiff, Hedge Witch, Herbalist, Hunter, Miner, Mystic, Scout, Villager,
+# Ranger
+#	Bounty Hunter, Coachman, Entertainer, Flagellant, Messenger, Pedlar, Roadwarden, Witch Hunter
+# Riverfolk
+#	Boatman, Huffer, Riverwoman, Riverwarden, Seaman, Smuggler, Stevedore, Wrecker,
+# Rogue
+#	Bawd, Charlatan, Fence, Grave Robber, Outlaw, Racketeer, Thief, Witch
+# Warrior
+#	Cavalryman, Guard, Knight, Pit Fighter, Protagonist, Soldier, Giant Slayer, Warrior Priest
+
+class = Any
+career = Any
+xp = 9000
