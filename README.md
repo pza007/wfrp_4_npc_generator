@@ -11,7 +11,7 @@ Generate random Non Player Character (NPC) in the world of WARHAMMER Fantasy Rol
 [Overview]: #getting_started
 1. Edit config.txt file
 2. Run *.exe file
-3. Enjoy the output *.pdf file!
+3. Enjoy the output *.png file!
 
 ## Report bugs ##
 [Open Issue directly][] - note that you need a GitHub account.
