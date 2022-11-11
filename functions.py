@@ -244,7 +244,7 @@ def translate(in_obj):
 # TEXT TO IMAGE
 def put_text_to_image(npc):
     gray_color = (142, 144, 153, 255)       # (120, 123, 131, 255)
-    img = Image.open('other_files/Character_Sheet.png')
+    img = Image.open('imgs/Character_Sheet.png')
     draw = ImageDraw.Draw(img)
     gl_v_lines = [66, 262, 730, 750, 990, 1251, 1316]
     gl_h_lines = [64, 420]
