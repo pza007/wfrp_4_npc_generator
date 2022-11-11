@@ -1,10 +1,10 @@
-# Male, Female
+# string: Any, Male, Female
 sex = Any
 
-# Human, Dwarf, Halfling, High Elf, Wood Elf, Gnome
+# string: Any, Human, Dwarf, Halfling, High Elf, Wood Elf, Gnome
 species = Any
 
-# Young, Middle, Old
+# string: Any, Young, Middle, Old
 age = Any
 
 # Academic
@@ -24,6 +24,11 @@ age = Any
 # Warrior
 #	Cavalryman, Guard, Knight, Pit Fighter, Protagonist, Soldier, Giant Slayer, Warrior Priest
 
+# string: from list above
 class = Any
+
+# string: from sub-list above
 career = Any
+
+# int: positive value
 xp = 9000
