@@ -1,7 +1,5 @@
 import re
-import math
-from constants import *
-from functions import *
+import random
 
 
 class NpcSingleton(object):
@@ -10,10 +8,8 @@ class NpcSingleton(object):
         if not hasattr(cls, 'instance'):
             cls.instance = super(NpcSingleton, cls).__new__(cls)
         return cls.instance
-
     def __init__(self):
-        self.sex = None               # [int] 0 or 1 (Male or Female)
-        self.sex_str = None           # [str] 'Male' or 'Female'
+        self.sex = None               # [str] 'Male' or 'Female'
         self.species = None           # [str] "Human", "Dwarf", "Halfling", "High Elf", "Wood Elf", "Gnome"
         self.age = None               # [int] in years
         self.height = None            # [float] in meters
@@ -23,15 +19,17 @@ class NpcSingleton(object):
         self.desc_reactions = None    # [list of str]
         self.desc_appearance = None   # [list of str]
         self.ch_class = None          # [str]
-        self.career = None            # [str]
+        self.career_main_name = None  # [str]
+        self.career_main = None       # [class from careers_nps.py]
         self.career_level = None      # [int]
+        self.career_current = None    # [CareerClass]
         self.status = None            # [str]
         self.trapping = None          # [str]
         self.money = None             # [str]
         self.dooming = None           # [str]
         self.xp_start = None          # [int]
         self.xp_left = None           # [int]
-        self.attributes = {           # {stat_name: [basic, advance, total]}
+        self.attributes = {           # {stat_name: [base, advance, total]}
             "WS": [0, 0, 0], "BS": [0, 0, 0], "S": [0, 0, 0], "T": [0, 0, 0], "AG": [0, 0, 0],
             "I": [0, 0, 0], "DEX": [0, 0, 0], "INT": [0, 0, 0], "WP": [0, 0, 0], "FEL": [0, 0, 0],
             "Wounds": [0, 0, 0], "MoveSpeed": [0, 0, 0], "Fate": [0, 0, 0], "Resilience": [0, 0, 0]}
@@ -39,292 +37,200 @@ class NpcSingleton(object):
         self.skills_advanced = {}     # {skill_name: [stat_str, stat_total, skill_advances, skill_total]}
         self.talents = {}             # {talent_name: (test, description)}
 
-        # INTERNAL variables
-        self._SpeciesN = None         # int
-        self._NamesSpecies = None     # [list of str]
-        self._SurnamesSpecies = None  # [list of str]
-        self._SkillNames = None       # [list of str]
-        self._SkillValues = None      # [list of int]
-        self._TalentNames = None      # [list of str]
-        self._TalentValues = None     # [list of int]
-        self._CareerSpecies = None    # [list of str]
-        self._CareerN = None          # int
-        self._CareerName = None       # str
-        self._ClassN = None           # int
-        # ["WS","BS","S","T","AG","I","DEX","INT","WP","FEL"]
-        self._StatsBase =    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # from class
-        self._StatsAdvance = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  #
-        self._StatsTotal =   [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # = _StatsBase + _StatsAdvance
-        # ["W", "M", "Fate", "Resilience", "Extra"]
-        self._StatsOther =   [0, 0, 0, 0, 0, 0]
-        self._Dooming = None          # str
-        self._Trapping = None         # [list of str]
-        self._Money = None            # str
+    def get_init_values(self, **kwargs):
+        from constants import age_by_species, careers_all, skills_all_basic
+        """
+        set: sex, species, age, class, main career, current carrer, status, xp, basic skills
+        """
+        self.sex = kwargs.get('sex')
+        self.species = kwargs.get('species')
+        # roll age in boundaries
+        in_age = kwargs.get('age')
+        age_range = age_by_species[self.species]
+        if in_age == 'Young':
+            low =  age_range[0]
+            high = age_range[0]+abs(age_range[1]-age_range[0])//4
+            self.age = random.randint(low, high)
+        elif in_age == 'Middle':
+            low =  age_range[1]-abs(age_range[2]-age_range[1])//4
+            high = age_range[1]+abs(age_range[2]-age_range[1])//4
+            self.age = random.randint(low, high)
+        else:   # 'Old':
+            low =  age_range[2]-abs(age_range[2]-age_range[1])//5
+            high = age_range[2]+abs(age_range[2]-age_range[1])//5
+            self.age = random.randint(low, high)
 
-        self.get_init_values()
-
-    def get_init_values(self):
-        with open('config.txt', 'r') as f:
-            for line in f.readlines():
-                if not line.startswith('#') and len(line) > 2:
-                    splits = line.split(' = ')
-                    splits = [text.strip() for text in splits]
-
-                    if splits[0] == 'sex':
-                        if splits[1] != 'Any':
-                            if splits[1] == 'Male':
-                                self.sex_str = 'Male'
-                                self.sex = 0
-                            else:
-                                self.sex_str = 'Female'
-                                self.sex = 1
-
-                    elif splits[0] == 'species':
-                        if splits[1] != 'Any':
-                            self._SpeciesN = SpeciesAll.index(splits[1]) + 1
-                            self.species = splits[1]
-
-                    elif splits[0] == 'age':
-                        if splits[1] != 'Any':
-                            # roll species if needed
-                            if self.species is None:
-                                self.roll_species()
-                            # roll age in boundaries
-                            age_range = AgeAll[self._SpeciesN - 1]
-                            if splits[1] == 'Young':
-                                low =  age_range[0]
-                                high = age_range[0]+abs(age_range[1]-age_range[0])//4
-                                self.age = random.randint(low, high)
-                            elif splits[1] == 'Middle':
-                                low =  age_range[1]-abs(age_range[2]-age_range[1])//4
-                                high = age_range[1]+abs(age_range[2]-age_range[1])//4
-                                self.age = random.randint(low, high)
-                            elif splits[1] == 'Old':
-                                low =  age_range[2]-abs(age_range[2]-age_range[1])//5
-                                high = age_range[2]+abs(age_range[2]-age_range[1])//5
-                                self.age = random.randint(low, high)
-
-                    elif splits[0] == 'class':
-                        if splits[1] != 'Any':
-                            self._ClassN = ClassAll.index(splits[1])
-                            self.ch_class = ClassAll[self._ClassN]
-
-                    elif splits[0] == 'career':
-                        if splits[1] != 'Any':
-                            # roll species if needed
-                            if self.species is None:
-                                self.roll_species()
-                            self._CareerSpecies = CareerSpeciesAll[self._SpeciesN - 1]
-
-                            self._CareerN = CareerL2.index(splits[1])
-                            # must fit species
-                            if self._CareerSpecies[self._CareerN] < 0:
-                                raise Exception(f'Career: {splits[1]} not available for species: {self.species}')
-                            # must fit class
-                            if self._ClassN is not None:
-                                if self._CareerN < ClassCareer[self._ClassN][0] or self._CareerN > ClassCareer[self._ClassN][1]:    # [min CareerN, max CareerN]
-                                    raise Exception(f'Career: {splits[1]} not available for class: {self.ch_class}')
-
-                            # map career to lvl 1
-                            self._CareerName = CareerL1[self._CareerN]
-                            self.career = self._CareerName
-                            self.career_level = 1
-                            self.status = CareerSocialL1[self._CareerN]
-
-                    elif splits[0] == 'xp':
-                        if splits[1] != 'Any':
-                            self.xp_start = int(splits[1])
-                            self.xp_left = self.xp_start
+        self.ch_class = kwargs.get('class')
+        self.career_main_name = kwargs.get('career')
+        self.career_main = careers_all[self.career_main_name]()
+        self.career_level = 0
+        self.career_current = self.career_main.lvl[self.career_level]
+        self.status = self.career_current.status
+        self.xp_start = kwargs.get('xp')
+        self.xp_left = self.xp_start
+        for skill_name in skills_all_basic.keys():
+            [stat_str, _, _] = skills_all_basic[skill_name]  # ["FEL", "basic", []]
+            [_, _, stat_total] = self.attributes[stat_str]  # [base, advance, total]
+            self.skills_basic.update({skill_name: [stat_str, stat_total, 0, stat_total]})
 
     def roll_npc(self):
-        #0  roll description
-        if self.sex is None: self.roll_sex()
-        if self.species is None: self.roll_species()
-        if self.age is None: self.roll_age()
+        #0  roll descriptions
         self.roll_height()
         self.roll_name()
         self.roll_description()
-        #1  roll class, career
-        if self.ch_class is None: self.roll_class()
-        if self.career is None: self.roll_career()  # TODO: for now -> just one career
-        #2  roll attributes
+        #1  roll attributes
         self.roll_attributes()
-        #3  advance stats
+        #2  advance stats
         self.advance_stats()
-        #4  roll skills and talents by species
+        #3  roll skills and talents by species
         self.roll_skills_species()
         self.roll_talents_species()
-        #5  set skills and talents by career
+        #4  set skills and talents by career
         self.set_skills_career()
         self.set_talents_career()
-        #6  modify base stats by talents
-        self.modify_stats_by_talents()
-        #7  roll_other_things
+        #5  roll_other_things
         self.roll_other_things()
         # update
         self.update_all()
 
-    def roll_sex(self):
-        self.sex = random.randint(0, 1)
-        if self.sex == 0:
-            self.sex_str = 'Male'
-        else:
-            self.sex_str = 'Female'
-    def roll_species(self):
-        SpeciesRoll = roll1d100()
-        if SpeciesRoll <= 89:
-            self._SpeciesN = 1
-        elif SpeciesRoll <= 90:
-            self._SpeciesN = 6
-        elif SpeciesRoll <= 95:
-            self._SpeciesN = 2
-        elif SpeciesRoll <= 98:
-            self._SpeciesN = 3
-        elif SpeciesRoll <= 99:
-            self._SpeciesN = 4
-        else:
-            self._SpeciesN = 5
-        self.species = SpeciesAll[self._SpeciesN - 1]
-    def roll_age(self):
-        # range e.g.: [6,  70//2,  70 ]
-        age_range = AgeAll[self._SpeciesN - 1]
-        self.age = random.randint(age_range[0], age_range[2])
     def roll_height(self):
+        from functions import random_pick, rollXd10
+        from constants import age_by_species, height_by_species
         # consider age
-        age_range = AgeAll[self._SpeciesN - 1]
-        value_range = [0.6, 1, 0.8]
-        factor = 1
-        if   self.age == age_range[0]:
-            factor = value_range[0]
-        elif age_range[0] < self.age <age_range[1]:
-            factor = value_range[0] + (abs(self.age-age_range[0])*abs(value_range[1]-value_range[0])) / (age_range[1]-age_range[0])
-        elif self.age == age_range[1]:
-            factor = value_range[1]
-        elif age_range[1] < self.age <age_range[2]:
-            factor = value_range[1] - (abs(self.age-age_range[1])*abs(value_range[2]-value_range[1])) / (age_range[2]-age_range[1])
-        elif self.age == age_range[2]:
-            factor = value_range[2]
+        age_range = age_by_species[self.species]
+        new_ranges = [age_range[0] + abs(age_range[0]-age_range[1])/2,
+                      age_range[1] + abs(age_range[1]-age_range[2])/2]
+        init_height = 0
+        if 0 < self.age <= new_ranges[0]:
+            init_height = height_by_species[self.species][0]
+        elif new_ranges[0] < self.age <= new_ranges[1]:
+            init_height = height_by_species[self.species][1]
+        else:
+            init_height = height_by_species[self.species][2]
         # roll height
         if self.species == "Human":
-            self.height = factor*(1.5 + rollXd10(4)/100)
+            self.height = init_height + rollXd10(4)/100
         elif self.species == "Dwarf":
-            self.height = factor*(1.3 + rollXd10(2)/100)
+            self.height = init_height + rollXd10(2)/100
         elif self.species == "Halfling":
-            self.height = factor*(0.95 + rollXd10(2)/100)
+            self.height = init_height + rollXd10(2)/100
         elif self.species == "High Elf":
-            self.height = factor*(1.8 + rollXd10(3)/100)
+            self.height = init_height + rollXd10(3)/100
         elif self.species == "Wood Elf":
-            self.height = factor*(1.7 + rollXd10(3)/100)
+            self.height = init_height + rollXd10(3)/100
         elif self.species == "Gnome":
-            self.height = factor*(1.0 + rollXd10(3)/100)
+            self.height = init_height + rollXd10(2)/100
     def roll_name(self):
-        """
-        :return: [str] name and surname (by species and sex)
-        """
-        self._NamesSpecies = NamesAll[self.sex][self._SpeciesN - 1]
-        # Dwarves could get Icelandic style surnames, but from either 66% MAle 33% female
-        if self._SpeciesN == 2 and random.random() > .5:
-            self._SurnamesSpecies = NamesAll[math.floor(random.random() * 3 / 2)][self._SpeciesN - 1]
-            suffix = SurnameSuffixDwarvenAll[self.sex][math.floor(random.random() * len(SurnameSuffixDwarvenAll[self.sex]))]
-            for i in range(len(self._SurnamesSpecies)):
-                self._SurnamesSpecies[i] = self._SurnamesSpecies[i] + suffix
-        else:
-            self._SurnamesSpecies = SurnamesAll[self._SpeciesN - 1]
+        from functions import random_pick, roll1d100
+        from constants import names_by_sex, surnames_by_species, surname_Suffix_Male_Dwarf, surname_Suffix_Female_Dwarf
 
-        self.name = self._NamesSpecies[math.floor(random.random() * len(self._NamesSpecies))] + " " + \
-                    self._SurnamesSpecies[math.floor(random.random() * len(self._SurnamesSpecies))]
+        out_name = random_pick(names_by_sex[self.sex][self.species])
+        out_surname = random_pick(surnames_by_species[self.species])
+
+        # Dwarves could get Icelandic style surnames: 66% Male 33% Female
+        if self.species == 'Dwarf':
+            roll_val = roll1d100()
+            if self.sex == 'Male' and roll_val <= 66:
+                out_surname += random_pick(surname_Suffix_Male_Dwarf)
+            if self.sex == 'Female' and roll_val <= 33:
+                out_surname += random_pick(surname_Suffix_Female_Dwarf)
+
+        # Noble - handles later
+
+        self.name = out_name + ' ' + out_surname
     def roll_description(self):
+        from functions import get_traits, get_appearance
         (self.desc_gen_look, self.desc_traits, self.desc_reactions), self.desc_appearance = get_traits(self), get_appearance(self)
-    def roll_class(self):
-        self._ClassN = random.randint(0, len(ClassAll)-1)
-        self.ch_class = ClassAll[self._ClassN]
-    def roll_career(self):
-        # filter by class
-        pool1 = list(range(ClassCareer[self._ClassN][0], ClassCareer[self._ClassN][1]))
-        # filter by species
-        self._CareerSpecies = CareerSpeciesAll[self._SpeciesN - 1]
-        pool2 = []
-        for idx in pool1:
-            if self._CareerSpecies[idx] > 0:
-                pool2.append(idx)
-        # roll and assign
-        self._CareerN = random.choice(pool2)
-        self._CareerName = CareerL1[self._CareerN]
-        self.career = self._CareerName
-        self.career_level = 1
-        self.status = CareerSocialL1[self._CareerN]
     def roll_attributes(self):
-        #   0     1     2    3    4     5     6      7     8      9
-        # ["WS", "BS", "S", "T", "AG", "I", "DEX", "INT", "WP", "FEL"]
+        from functions import roll2d10
+        from constants import attributes_by_species
+
         # roll base stats by species e.g. 2d10+20
-        for i in range(len(self._StatsBase)):
-            self._StatsBase[i] = roll2d10()+StatsAll[self._SpeciesN - 1][i]
-        #   0    1     2          3           4
-        # ["W", "M", "Fate", "Resilience", "Extra"]
-        other_stats = StatsExtraAll[self._SpeciesN - 1]
-        #   wounds
-        bS = self._StatsBase[2] // 10
-        bT = self._StatsBase[3] // 10
-        bWP = self._StatsBase[8] // 10
-        if self._SpeciesN == 0:  # "Human"
-            self._StatsOther[0] = bS + 2 * bT + bWP
-        elif self._SpeciesN == 1:  # "Dwarf"
-            self._StatsOther[0] = bS + 2 * bT + bWP
-        elif self._SpeciesN == 2:  # "Halfling"
-            self._StatsOther[0] = 2 * bT + bWP
-        elif self._SpeciesN == 3:  # "High Elf"
-            self._StatsOther[0] = bS + 2 * bT + bWP
-        elif self._SpeciesN == 4:  # "Wood Elf"
-            self._StatsOther[0] = bS + 2 * bT + bWP
-        elif self._SpeciesN == 5:  # "Gnome"
-            self._StatsOther[0] = 2 * bT + bWP
-        #   move speed
-        self._StatsOther[1] = other_stats[1]
-        #   fate, resilience
-        roll_val = random.randint(0, other_stats[-1])
-        self._StatsOther[2] += roll_val
-        self._StatsOther[3] += other_stats[-1] - roll_val
-        # update attributes
+        for stat_name in ["WS", "BS", "S", "T", "AG", "I", "DEX", "INT", "WP", "FEL"]:
+            species_val = attributes_by_species[self.species][stat_name]
+            self.attributes.update({stat_name: [roll2d10()+species_val, 0, 0]})     # {stat_name: [base, advance, total]}
+        # roll wounds
+        bonusS = self.attributes['S'][0] // 10      # base
+        bonusT = self.attributes['T'][0] // 10      # base
+        bonusWP = self.attributes['WP'][0] // 10    # base
+        if self.species == "Human":
+            wounds_val = bonusS + 2 * bonusT + bonusWP
+        elif self.species == "Dwarf":
+            wounds_val = bonusS + 2 * bonusT + bonusWP
+        elif self.species == "Halfling":
+            wounds_val = 2 * bonusT + bonusWP
+        elif self.species == "High Elf":
+            wounds_val = bonusS + 2 * bonusT + bonusWP
+        elif self.species == "Wood Elf":
+            wounds_val = bonusS + 2 * bonusT + bonusWP
+        elif self.species == "Gnome":
+            wounds_val = 2 * bonusT + bonusWP
+        self.attributes.update({'Wounds': [wounds_val, 0, 0]})
+        # roll move speed
+        self.attributes.update({'MoveSpeed': [attributes_by_species[self.species]['MoveSpeed'], 0, 0]})
+        # roll fate
+        extra_val = attributes_by_species[self.species]['Extra']
+        roll_val = random.randint(0, extra_val)
+        self.attributes.update({'Fate': [attributes_by_species[self.species]['Fate'] + roll_val, 0, 0]})
+        # roll resilience
+        rest_val = extra_val - roll_val
+        self.attributes.update({'Resilience': [attributes_by_species[self.species]['Resilience'] + rest_val, 0, 0]})
+        # update
         self.update_attributes()
     def advance_stats(self):
         # add 5 advances points by career
         choice_list = [[5, 0, 0], [4, 1, 0], [3, 1, 1], [3, 2, 0], [2, 2, 1]]
         roll_list = choice_list[random.randint(0, 4)]
-        for i in range(3):
-            idx = CareerAdvanceL1[self._CareerN][i]
-            self._StatsAdvance[idx] += roll_list[i]
-        # update attributes
+        #   self.career_current.advances == list of str, e.g. ['T', 'DEX', 'INT']
+        for stat_name, value in zip(self.career_current.advances, roll_list):
+            [base, advance, total] = self.attributes[stat_name]
+            advance += value
+            self.attributes.update({stat_name: [base, advance, total]})
+        # update
         self.update_attributes()
     def roll_skills_species(self):
+        from constants import skills_by_species
+
         # roll 6 skills
-        skills_by_species = SkillStartAll[self._SpeciesN - 1]
-        self._SkillNames = []
-        self._SkillValues = []
+        in_skills = skills_by_species[self.species]
+        out_skills = {}     # {skill_name: advance_value}
         indexes = []
         while len(indexes) < 6:
-            idx = random.randint(0, len(skills_by_species) - 1)
+            idx = random.randint(0, len(in_skills) - 1)
             if idx not in indexes:
                 indexes.append(idx)
-        # get skill names, skill values by index
-        for i, idx in enumerate(indexes):
-            self._SkillNames.append(skills_by_species[idx])
-            # advance
+                out_skills.update({in_skills[idx]: 0})
+
+        # advance skills values
+        for i, skill_name in enumerate(out_skills.keys()):
             if i < 3:
-                self._SkillValues.append(5)     # 3 skills of value: 5
+                out_skills.update({skill_name: 5})  # advance 3 skills by value: 5
             else:
-                self._SkillValues.append(3)     # 3 skills of value: 3
-        # parse skill names
-        self._SkillNames = self.parse_skill_words(self._SkillNames)
+                out_skills.update({skill_name: 3})  # advance 3 skills by value: 5
+
+        # parse
+        out_skills = self.parse_skill_words(out_skills)
+        # add
+        self.add_skills(out_skills)
+        # update
+        self.update_skills()
     def roll_talents_species(self):
+        from constants import talents_by_species
+
         # roll 5 talents
-        self._TalentNames = TalentStartAll[self._SpeciesN - 1]
-        # parse talent names
-        self._TalentNames = self.parse_talent_words(self._TalentNames)
-        # advance
-        self._TalentValues = [1]*len(self._TalentNames)
+        in_talents = talents_by_species[self.species]
+        out_talents = {talent_name: 1 for talent_name in in_talents}    # {talent_name: advance_value}
+        # parse
+        out_talents = self.parse_talent_words(out_talents)
+        # add
+        self.add_talents(out_talents)
+        # modify
+        self.modify_stats_by_talents(out_talents)
     def set_skills_career(self):
-        # add 8 skills, advance 40 points
-        skills_by_career = CareerSkillL1[self._CareerN]
+        from functions import random_pick
+        # add 8 skills
+        out_skills = {skill_name: 0 for skill_name in self.career_current.skills}  # {skill_name: value}
+        # pick one of advance option (in sum 40 points)
         example = [
             [5, 5, 5, 5, 5, 5, 5, 5],
             [7, 6, 5, 5, 5, 5, 4, 3],
@@ -336,94 +242,517 @@ class NpcSingleton(object):
             [10, 9, 8, 7, 3, 2, 1, 0],
             [10, 10, 10, 6, 1, 1, 1, 1],
             [10, 10, 10, 10, 0, 0, 0, 0]]
-        skills_values = example[random.randint(0, len(example)-1)]
-        for skill_name, skill_value in zip(skills_by_career, skills_values):
-            if skill_name not in self._SkillNames:
-                self._SkillNames.append(skill_name)
-                self._SkillValues.append(skill_value)
-            else:
-                idx = self._SkillNames.index(skill_name)
-                self._SkillValues[idx] += skill_value
+        out_values = example[random_pick(list(range(len(example))))]
+        # advance skills values
+        for i, skill_name in enumerate(out_skills.keys()):
+            out_skills.update({skill_name: out_values[i]})
+
+        # parse
+        out_skills = self.parse_skill_words(out_skills)
+        # add
+        self.add_skills(out_skills)
+        # update
+        self.update_skills()
     def set_talents_career(self):
-        # add 1 (out of 4) talent, advance
-        # get unique names
-        talents_by_career = list(set(CareerTalentsL1[self._CareerN]) - set(self._TalentNames))
-        # pick one
-        roll_val = random.randint(0, len(talents_by_career)-1)
-        self._TalentNames.append(talents_by_career[roll_val])
-        # parse talent names
-        self._TalentNames = self.parse_talent_words(self._TalentNames)
-        # advance
-        self._TalentValues.append(1)
-    def modify_stats_by_talents(self):
-        # add values to basic stats, if talent says so
-        # ["WS","BS","S","T","AG","I","DEX","INT","WP","FEL"]
-        # ["W", "M", "Fate", "Resilience", "Extra"]
-        for talent_name in self._TalentNames:
-            if talent_name == "Coolheaded":
-                self._StatsBase[8] += 5
-            elif talent_name == "Fleetfooted":  # MoveSpeed += 1
-                self._StatsOther[1] += 1
-            elif talent_name == "Hardy":  # Wounds += Toughness Bonus
-                bT = self._StatsTotal[3] // 10
-                self._StatsOther[0] += bT
-            elif talent_name == "Lightning Reflexes":
-                self._StatsBase[4] += 5
-            elif talent_name == "Marksman":
-                self._StatsBase[1] += 5
-            elif talent_name == "Nimble Fingered":
-                self._StatsBase[6] += 5
-            elif talent_name == "Savvy":
-                self._StatsBase[7] += 5
-            elif talent_name == "Sharp":
-                self._StatsBase[5] += 5
-            elif talent_name == "Suave":
-                self._StatsBase[9] += 5
-            elif talent_name == "Very Resilient":
-                self._StatsBase[3] += 5
-            elif talent_name == "Very Strong":
-                self._StatsBase[2] += 5
-            elif talent_name == "Warrior Born":
-                self._StatsBase[0] += 5
-        # update attributes
-        self.update_attributes()
+        from functions import random_pick
+        # get unique talent names
+        talent_names = list(set(self.career_current.talents) - set(self.talents.keys()))
+        # pick only one
+        out_talents = {random_pick(talent_names): 1}    # {talent_name: advance_value}
+        # parse
+        out_talents = self.parse_talent_words(out_talents)
+        # add
+        self.add_talents(out_talents)
+        # modify
+        self.modify_stats_by_talents(out_talents)
     def roll_other_things(self):
-        def rollTrappings(TrapString):
-            indexes = [i.start() for i in re.finditer("[0-9]d10", TrapString)]
-            for index in indexes:
-                number = int(TrapString[index:index + 1])  # Xd10
-                rolled_val = rollXd10(number)
-                TrapString = TrapString.replace(TrapString[index:index + 4], str(rolled_val))
-            return TrapString
-        def rollMoney(SocialString):
-            ParsedSocial = SocialString.split(" ")
-            if ParsedSocial[0] == "Gold":
-                money = ParsedSocial[1] + " Gold Coins."
-            elif ParsedSocial[0] == "Silver":
-                money = str(rollXd10(int(ParsedSocial[1]))) + " Silver Coins."
-            elif ParsedSocial[0] == "Brass":
-                money = str(rollXd10(int(ParsedSocial[1]) * 2)) + " Brass Coins."
-            else:
-                money = "0 coins."
-            return money
+        from functions import random_pick
+        from constants import surname_Suffix_Human, doomings_all, trappings_by_class
+
         # name - human Noble or Noble Blood?
-        if (self._SpeciesN == 1) and ((self._CareerName == "Noble") or ("Noble Blood" in self._TalentNames)):
+        if (self.species == "Human") and ((self.career_main.lvl[1].name == "Noble") or ("Noble Blood" in self.talents.keys())):
             name, surname = self.name.split(' ')
-            if len([1 for suffix in SurnameSuffixHumanNoble if surname.find(suffix) >= 0]) == 0:
-                surname = surname + SurnameSuffixHumanNoble[math.floor(random.random() * len(SurnameSuffixHumanNoble))]
-            self.name = name + " von " + surname
+            suffix = random_pick(surname_Suffix_Human)
+            self.name = name + " von " + surname + suffix
         # skill - Dooming?
-        if 'Doomed' in self._TalentNames:
-            self._Dooming = DoomingsAll[math.floor(random.random() * len(DoomingsAll))]
-            self.dooming = self._Dooming
+        if 'Doomed' in self.talents.keys():
+            self.dooming = random_pick(doomings_all)
         else:
             self.dooming = '-'
-        # trapping and money
-        self._Trapping = rollTrappings(TrappingClass[self._ClassN] + ", " + TrappingCareerL1[self._CareerN])
-        self.trapping = self._Trapping
-        self._Money = rollMoney(CareerSocialL1[self._CareerN])
-        self.money = self._Money
+        # trappings
+        self.trapping = self.roll_trappings(trappings_by_class[self.ch_class] + ", " + self.career_current.trappings)
+        # money
+        self.money = self.roll_money(self.career_current.status)
+    @staticmethod
+    def roll_trappings(in_string):
+        from functions import rollXd10
+        indexes = [i.start() for i in re.finditer("[0-9]d10", in_string)]
+        for index in indexes:
+            number = int(in_string[index:index + 1])  # Xd10
+            rolled_val = rollXd10(number)
+            in_string = in_string.replace(in_string[index:index + 4], str(rolled_val))
+        return in_string
+    @staticmethod
+    def roll_money(in_status):  # e.g. in_status="Brass 3"
+        from functions import rollXd10
+        social = in_status.split(" ")
+        if social[0] == "Gold":
+            money = social[1] + " Gold Coins"
+        elif social[0] == "Silver":
+            money = str(rollXd10(int(social[1]))) + " Silver Coins"
+        elif social[0] == "Brass":
+            money = str(rollXd10(int(social[1]) * 2)) + " Brass Coins"
+        else:
+            money = "0 coins."
+        return money
+    def update_all(self):
+        self.update_attributes()
+        self.update_skills()
 
+
+
+    def advance_by_xp(self, xp=None):
+        # possible for levels: 1-3
+        def advance_talents(xp_val):
+            """
+            Advance (by 1 value) all missing talents from current career
+            :return: xp: int
+            :return: boolean: Was there enough xp to fully advance in this domain?
+            """
+            cnt = 0
+
+            # get talents from current career
+            out_talents = {talent_name: 1 for talent_name in self.career_current.talents}    # {talent_name: advance_value}
+            #   remove already owned talents
+            for talent_name in self.talents.keys():
+                if talent_name in out_talents.keys():
+                    del(out_talents[talent_name])
+            # parse
+            out_talents = self.parse_talent_words(out_talents)
+            # add new talents
+            for talent_name, advance in out_talents.items():
+                if xp_val >= 100:
+                    # add
+                    self.add_talents({talent_name: advance})
+                    # modify
+                    self.modify_stats_by_talents({talent_name: advance})
+                    xp_val -= 100   # advancing talent to 1 costs 100xp
+                    cnt += 1
+
+            if cnt == len(out_talents):
+                return xp_val, True
+            else:
+                return xp_val, False
+        def advance_stats(xp_val):
+            """
+            ALL stats for current and previous careers -> advance to 'adv_sum' value
+            :return: xp: int
+            :return: boolean: Was there enough xp to fully advance in this domain?
+            """
+            def get_cost(stat_val):
+                if 0 <= stat_val <= 5:
+                    return 25
+                elif 6 <= stat_val <= 10:
+                    return 30
+                elif 11 <= stat_val <= 15:
+                    return 40
+                elif 16 <= stat_val <= 20:
+                    return 50
+                elif 21 <= stat_val <= 25:
+                    return 70
+                elif 26 <= stat_val <= 30:
+                    return 90
+                elif 31 <= stat_val <= 35:
+                    return 120
+                elif 36 <= stat_val <= 40:
+                    return 150
+                elif 41 <= stat_val <= 45:
+                    return 190
+                elif 46 <= stat_val <= 50:
+                    return 320
+                else:
+                    return (stat_val-50)//5 * 30 + 350  # own formula
+            cnt = 0
+
+            adv_sum = (self.career_level + 1) * 5
+            # get all stat names
+            stat_names = []
+            for i in range(0, self.career_level+1):
+                stat_names = stat_names + self.career_main.lvl[i].advances   # e.g. ['T', 'DEX', 'INT']
+            # increase advance values
+            for stat_name in stat_names:
+                [base, advance, total] = self.attributes[stat_name]
+                if advance < adv_sum:
+                    for j in range(adv_sum - advance):
+                        current_advance = self.attributes[stat_name][1]
+                        cost = get_cost(current_advance)
+                        if xp_val >= cost:
+                            current_advance += 1
+                            current_total = base + current_advance
+                            # update!
+                            self.attributes.update({stat_name: [base, current_advance, current_total]})
+                            xp_val -= cost
+
+                if self.attributes[stat_name][1] >= adv_sum:
+                    cnt += 1
+
+            if cnt == len(stat_names):
+                return xp_val, True
+            else:
+                return xp_val, False
+        def advance_skills(xp_val):
+            """
+            8 skills from current and previous careers -> advance to 'adv_sum' value
+            :return: xp: int
+            :return: boolean: Was there enough xp to fully advance in this domain?
+            """
+            def get_cost(skill_val):
+                if 0 <= skill_val <= 5:
+                    return 10
+                elif 6 <= skill_val <= 10:
+                    return 15
+                elif 11 <= skill_val <= 15:
+                    return 20
+                elif 16 <= skill_val <= 20:
+                    return 30
+                elif 21 <= skill_val <= 25:
+                    return 40
+                elif 26 <= skill_val <= 30:
+                    return 60
+                elif 31 <= skill_val <= 35:
+                    return 80
+                elif 36 <= skill_val <= 40:
+                    return 110
+                elif 41 <= skill_val <= 45:
+                    return 140
+                elif 46 <= skill_val <= 50:
+                    return 180
+                else:
+                    return (skill_val-50)//5 * 30 + 210  # own formula
+            cnt = 0
+
+            adv_sum = (self.career_level + 1) * 5
+            # get all skill names
+            skill_names = []
+            for i in range(self.career_level, -1, -1):
+                skill_names = skill_names + self.career_main.lvl[i].skills   # e.g. ['Lore (Any)', 'Track']
+            #   pick 8 randomly, without repetitions
+            skill_names = random.sample(skill_names, 8)
+
+            # get current advance values of skills
+            out_skills = {}  # {skill_name: advance_value}
+            for skill_name in skill_names:
+                name_short = skill_name.split(' (')[0]
+
+                # in skill_basic?
+                if name_short in self.skills_basic.keys():
+                    [_, _, skill_advances, _] = self.skills_basic[name_short]  # [stat_str, stat_total, skill_advances, skill_total]
+                    out_skills.update({skill_name: skill_advances})
+
+                # in skill_advanced?
+                else:
+                    # try skill's full name
+                    if skill_name in self.skills_advanced.keys():
+                        [_, _, skill_advances, _] = self.skills_advanced[skill_name]  # [stat_str, stat_total, skill_advances, skill_total]
+                        out_skills.update({skill_name: skill_advances})
+                    else:
+                        # skill name has '(Any one)' and there is according name in skill_advanced?
+                        if skill_name.find('(Any one)') >= 0 and name_short in [name.split(' (')[0] for name in self.skills_advanced.keys()]:
+                            # {skill_name: [stat_str, stat_total, skill_advances, skill_total]}
+                            tmp = [(name, val) for name, [_, _, val, _] in self.skills_advanced.items() if name.find(name_short) >= 0]
+                            tmp.sort()
+                            final_name = tmp[-1][0]  # pick skill with the highest advance value
+                            [_, _, skill_advances, _] = self.skills_advanced[final_name]
+                            out_skills.update({final_name: skill_advances})
+
+                        # skill name is new, even for skill_advanced
+                        else:
+                            out_skills.update({skill_name: 0})
+            # parse
+            out_skills = self.parse_skill_words(out_skills)
+            # advance
+            for skill_name in out_skills.keys():
+                advance = out_skills[skill_name]
+                if advance < adv_sum:
+                    for j in range(adv_sum - advance):
+                        cost = get_cost(advance)
+                        if xp_val >= cost:
+                            advance += 1
+                            # add to previous value!
+                            self.add_skills({skill_name: 1})
+                            xp_val -= cost
+
+                if advance >= adv_sum:
+                    cnt += 1
+
+            if cnt == 8:
+                return xp_val, True
+            else:
+                return xp_val, False
+        def advance_next_level(xp_val, npc):
+            """
+            To be able to advance to next career level, npc must have:
+            -> all stats advanced: (already fulfilled)!
+            -> 8 skills advanced: (already fulfilled)!
+            -> at least 1 talent advanced: (already fulfilled)!
+            -> 100 xp: ?
+            :return: xp: int
+            :return: boolean: Was there enough xp to advance to next career level?
+            """
+
+            if xp_val >= 100:
+                # deduct xp
+                xp_val -= 100
+                # switch to new career
+                npc.career_level += 1
+                npc.career_current = npc.career_main.lvl[npc.career_level]
+                npc.status = npc.career_current.status
+
+                # new skills - will be added in next iteration
+                # new talents - will be added in next iteration
+
+                # new trappings
+                npc.trapping = npc.roll_trappings(npc.trapping + ", " + npc.career_current.trappings)
+                # new money
+                npc.money = npc.money + ', ' + npc.roll_money(npc.career_current.status)
+
+                return xp_val, True
+            else:
+                return xp_val, False
+
+        if xp is None:
+            xp = self.xp_start
+        # ---- Talents
+        xp, f_full_advance = advance_talents(xp)
+        self.update_all()
+        if not f_full_advance:
+            self.xp_left = xp
+            return
+        # --- Stats
+        xp, f_full_advance = advance_stats(xp)
+        self.update_all()
+        if not f_full_advance:
+            self.xp_left = xp
+            return
+        # ---- Skills
+        xp, f_full_advance = advance_skills(xp)
+        self.update_all()
+        if not f_full_advance:
+            self.xp_left = xp
+            return
+        # ---- Advance to next level?
+        xp, f_advanced = advance_next_level(xp, self)
+        self.update_all()
+        if f_advanced:
+            self.advance_by_xp(xp)  # continue advancing...
+        else:
+            self.xp_left = xp
+            return
+
+    def update_attributes(self):
+        # stats - calculate all total values
+        for stat_name in self.attributes.keys():
+            [base, advance, total] = self.attributes[stat_name]   # {stat_name: [base, advance, total]}
+            total = base + advance
+            self.attributes.update({stat_name: [base, advance, total]})
+
+        # wounds - calculate based on new stats
+        bonusS = self.attributes['S'][2] // 10  # total
+        bonusT = self.attributes['T'][2] // 10  # total
+        bonusWP = self.attributes['WP'][2] // 10  # total
+        if self.species == "Human":
+            wounds_val = bonusS + 2 * bonusT + bonusWP
+        elif self.species == "Dwarf":
+            wounds_val = bonusS + 2 * bonusT + bonusWP
+        elif self.species == "Halfling":
+            wounds_val = 2 * bonusT + bonusWP
+        elif self.species == "High Elf":
+            wounds_val = bonusS + 2 * bonusT + bonusWP
+        elif self.species == "Wood Elf":
+            wounds_val = bonusS + 2 * bonusT + bonusWP
+        elif self.species == "Gnome":
+            wounds_val = 2 * bonusT + bonusWP
+        self.attributes.update({'Wounds': [wounds_val, 0, wounds_val]})
+
+    @staticmethod
+    def parse_skill_words(in_skills):
+        from functions import random_pick
+        from constants import skills_all
+        """
+        :param in_skills:     {skill_name: advance_value}
+        :return: out_skills:  {skill_name: advance_value}
+        """
+        # parse (Any one) -> choose one from list
+        out_skills = {}
+        for skill_name, advance in in_skills.items():
+            new_name = ''
+            if skill_name.find("(Any one)") >= 0:
+                short_name = skill_name[:skill_name.find('(Any one)') - 1]
+                _, _, choose_list = skills_all[short_name]
+                new_name = short_name + ' (' + random_pick(choose_list) + ')'
+            else:
+                new_name = skill_name
+            out_skills.update({new_name: advance})
+
+        return out_skills
+    def add_skills(self, in_skills):
+        from constants import skills_all_basic, skills_all_advanced
+        """
+        :param in_skills:     {skill_name: advance_value}
+        """
+        # {skill_name: [stat_str, stat_total, skill_advances, skill_total]}
+        for skill_name, advance in in_skills.items():
+            # skill belongs to basic group?
+            name_short = skill_name.split(' (')[0]
+            if name_short in skills_all_basic.keys():
+                # skill must exists -> increase advance value
+                [stat_str, stat_total, skill_advances, skill_total] = self.skills_basic[name_short]
+                skill_advances += advance
+                skill_total = stat_total + skill_advances
+                self.skills_basic.update({name_short: [stat_str, stat_total, skill_advances, skill_total]})
+
+            # skill belongs to advanced group?
+            else:
+                # skill already exists? -> increase value: skill_advances
+                if skill_name in self.skills_advanced.keys():
+                    [stat_str, stat_total, skill_advances, skill_total] = self.skills_advanced[skill_name]
+                    skill_advances += advance
+                    skill_total = stat_total + skill_advances
+                    self.skills_advanced.update({skill_name: [stat_str, stat_total, skill_advances, skill_total]})
+                # create new entry
+                else:
+                    [stat_str, _, _] = skills_all_advanced[name_short]  # ["INT", "advanced", ["Grey Order", "Guild"]
+                    [_, _, stat_total] = self.attributes[stat_str]    # [base, advance, total]
+                    skill_advances = advance
+                    skill_total = stat_total + skill_advances
+                    self.skills_advanced.update({skill_name: [stat_str, stat_total, skill_advances, skill_total]})
+    def update_skills(self):
+        # recalculate: stat_total, skill_advances, skill_total
+        for skill_name, [stat_str, stat_total, skill_advances, skill_total] in self.skills_basic.items():
+            [_, _, stat_total] = self.attributes[stat_str]  # [base, advance, total]
+            skill_total = stat_total + skill_advances
+            self.skills_basic.update({skill_name: [stat_str, stat_total, skill_advances, skill_total]})
+
+        for skill_name, [stat_str, stat_total, skill_advances, skill_total] in self.skills_advanced.items():
+            [_, _, stat_total] = self.attributes[stat_str]  # [base, advance, total]
+            skill_total = stat_total + skill_advances
+            self.skills_advanced.update({skill_name: [stat_str, stat_total, skill_advances, skill_total]})
+
+        # filter only skills with at least 1 advance
+        #out2 = {}
+        #for skill_name, values_list in out.items():
+        #    if values_list[2] > 0:
+        #        out2.update({skill_name: values_list})
+        #self.skills_advanced = out2
+        #if len(found_total) != len(self._SkillNames): print("Not all skills were found", 'FOUND:', found_total, 'ALL:', self._SkillNames)
+
+    @staticmethod
+    def parse_talent_words(in_talents):
+        from functions import random_pick, roll1d100
+        from constants import talents_random, talents_all
+        """
+        :param in_talents:     {talent_name: advance_value}
+        :return: out_talents:  {talent_name: advance_value}
+        """
+        out_talents = {}
+        for talent_name, advance in in_talents.items():
+            name = talent_name
+            # sth " or " sth
+            if name.find(" or ") >= 0:
+                two_talents = name.split(" or ")
+                name = random_pick(two_talents)  # pick one from two talents
+
+            # Random
+            if name == "Random":
+                name = talents_random[roll1d100() - 1]
+
+            # (Any one)
+            if name.find("(Any one)") >= 0:
+                short_name = name[:name.find('(Any one)') - 1]
+                [_, _, _, choose_list] = talents_all[short_name]  # ["Bonus I", "Perception", "Perception test...", ["Vision", "Taste"]]
+                name = short_name + ' (' + random_pick(choose_list) + ')'
+
+            out_talents.update({name: advance})
+
+        return out_talents
+    def add_talents(self, in_talents):
+        from constants import talents_all
+        """
+        :param in_talents:     {talent_name: advance_value}
+        """
+        for talent_name, advance in in_talents.items():
+            short_name = talent_name.split(' (')[0]
+            [_, test, description, _] = talents_all[
+                short_name]  # ["Bonus I", "Perception", "Perception test...", ["Vision", "Taste"]]
+            self.talents.update({talent_name: (test, description)})  # {talent_name: (test, description)}
+    def modify_stats_by_talents(self, in_talents):
+        """
+        :param in_talents: {talent_name: advance_value}
+        """
+        # add values to base stats, if talent says so
+        for talent_name in in_talents.keys():
+            #{stat_name: [base, advance, total]}
+            if talent_name == "Coolheaded":
+                # WP+5
+                [base, advance, total] = self.attributes['WP']
+                self.attributes.update({'WP': [base+5, advance, total]})
+            elif talent_name == "Fleetfooted":
+                # MoveSpeed+1
+                [base, advance, total] = self.attributes['MoveSpeed']
+                self.attributes.update({'MoveSpeed': [base+1, advance, total]})
+            elif talent_name == "Hardy":
+                # Wounds += Toughness Bonus
+                bonusT = self.attributes['WP'][2] // 10  # total value of T
+                [base, advance, total] = self.attributes['Wounds']
+                self.attributes.update({'Wounds': [base+bonusT, advance, total]})
+            elif talent_name == "Lightning Reflexes":
+                # AG+5
+                [base, advance, total] = self.attributes['AG']
+                self.attributes.update({'AG': [base+5, advance, total]})
+            elif talent_name == "Luck":
+                # max Fate+1
+                [base, advance, total] = self.attributes['Fate']
+                self.attributes.update({'Fate': [base+1, advance, total]})
+            elif talent_name == "Marksman":
+                # BS+5
+                [base, advance, total] = self.attributes['BS']
+                self.attributes.update({'BS': [base+5, advance, total]})
+            elif talent_name == "Nimble Fingered":
+                # DEX+5
+                [base, advance, total] = self.attributes['DEX']
+                self.attributes.update({'DEX': [base+5, advance, total]})
+            elif talent_name == "Savvy":
+                # INT+5
+                [base, advance, total] = self.attributes['INT']
+                self.attributes.update({'INT': [base+5, advance, total]})
+            elif talent_name == "Sharp":
+                # I+5
+                [base, advance, total] = self.attributes['I']
+                self.attributes.update({'I': [base+5, advance, total]})
+            elif talent_name == "Suave":
+                # FEL+5
+                [base, advance, total] = self.attributes['FEL']
+                self.attributes.update({'FEL': [base+5, advance, total]})
+            elif talent_name == "Very Resilient":
+                # T+5
+                [base, advance, total] = self.attributes['T']
+                self.attributes.update({'T': [base+5, advance, total]})
+            elif talent_name == "Very Strong":
+                # S+5
+                [base, advance, total] = self.attributes['S']
+                self.attributes.update({'S': [base+5, advance, total]})
+            elif talent_name == "Warrior Born":
+                # WS+5
+                [base, advance, total] = self.attributes['WS']
+                self.attributes.update({'S': [base+5, advance, total]})
+
+        # update attributes
+        self.update_attributes()
+
+
+
+    # function "present" -> obsolete, not used
+    """
     def present(self):
         # update
         self.update_all()
@@ -453,371 +782,7 @@ class NpcSingleton(object):
             print(f'Dooming: {self._Dooming}')
         print(f'Trapping: {self._Trapping}')
         print(f'Money: {self._Money}')
-
-    def advance_by_xp(self, xp=None):
-        def advance_talents(xp_val, npc):
-            # advance (to 1) all missing talents from career
-            if npc.career_level == 1:
-                talents_by_career = list(CareerTalentsL1[npc._CareerN])
-            elif npc.career_level == 2:
-                talents_by_career = list(CareerTalentsL2[npc._CareerN])
-            elif npc.career_level == 3:
-                talents_by_career = list(CareerTalentsL3[npc._CareerN])
-            elif npc.career_level == 4:
-                talents_by_career = list(CareerTalentsL4[npc._CareerN])
-            else: return None    # error
-
-            # find out which talent is already advanced and remove it from the list: talents_by_career
-            for i in range(len(npc._TalentNames)):
-                to_del = [t_name for t_name in talents_by_career if t_name.split('(')[0].find(npc._TalentNames[i].split('(')[0]) >= 0]
-                if len(to_del) > 0:
-                    for name in to_del:
-                        talents_by_career.remove(name)
-            # advance
-            for talent_name in talents_by_career:
-                if xp_val >= 100:
-                    npc._TalentNames.append(talent_name)
-                    npc._TalentValues.append(1)
-                    xp_val -= 100   # advancing talent to 1 is always 100xp
-            return xp_val
-        def advance_stats(xp_val, npc):
-            def get_cost(stat_val):
-                if 0 <= stat_val < 5:
-                    return 25
-                elif 5 <= stat_val < 10:
-                    return 30
-                elif 10 <= stat_val < 15:
-                    return 40
-                elif 15 <= stat_val < 20:
-                    return 50
-                elif 20 <= stat_val <= 25:
-                    return 70
-                else: return None    # error
-            # advance selected career stats to be able to reach next lvl
-            if npc.career_level == 1:
-                adv_sum = 5
-                stats = CareerAdvanceL1[npc._CareerN]
-            elif npc.career_level == 2:
-                adv_sum = 10
-                stats = CareerAdvanceL2[npc._CareerN]
-            elif npc.career_level == 3:
-                adv_sum = 15
-                stats = CareerAdvanceL3[npc._CareerN]
-            elif npc.career_level == 4:
-                adv_sum = 20
-                stats = CareerAdvanceL4[npc._CareerN]
-            else: return None    # error
-
-            for i in range(len(stats)):
-                idx = stats[i]
-                if npc._StatsAdvance[idx] < adv_sum:
-                    for j in range(adv_sum - npc._StatsAdvance[idx]):
-                        cost = get_cost(npc._StatsAdvance[idx])
-                        if xp_val >= cost:
-                            npc._StatsAdvance[idx] += 1
-                            xp_val -= cost
-            return xp_val
-        def advance_skills(xp_val, npc):
-            def get_cost(skill_val):
-                if 0 <= skill_val < 5:
-                    return 10
-                elif 5 <= skill_val < 10:
-                    return 15
-                elif 10 <= skill_val < 15:
-                    return 20
-                elif 15 <= skill_val < 20:
-                    return 30
-                elif 20 <= skill_val <= 25:
-                    return 40
-                else: return None    # error
-            # advance all career skills to be able to reach next level
-            if npc.career_level == 1:
-                adv_sum = 5
-            elif npc.career_level == 2:
-                adv_sum = 10
-            elif npc.career_level == 3:
-                adv_sum = 15
-            elif npc.career_level == 4:
-                adv_sum = 20
-            else: return None    # error
-
-            for i in range(len(npc._SkillValues)):
-                if npc._SkillValues[i] < adv_sum:
-                    for j in range(adv_sum - npc._SkillValues[i]):
-                        cost = get_cost(npc._SkillValues[i])
-                        if xp_val >= cost:
-                            npc._SkillValues[i] += 1
-                            xp_val -= cost
-            return xp_val
-        def advance_next_level(xp_val, npc):
-            # possible for levels: 1-3
-            def rollTrappings(TrapString):
-                indexes = [i.start() for i in re.finditer("[0-9]d10", TrapString)]
-                for index in indexes:
-                    number = int(TrapString[index:index + 1])  # Xd10
-                    rolled_val = rollXd10(number)
-                    TrapString = TrapString.replace(TrapString[index:index + 4], str(rolled_val))
-                return TrapString
-            def rollMoney(SocialString, in_npc):
-                # old values
-                values = [0, 0, 0]  # Gold Coins, Silver Coins, Brass Coins
-                splits_gold = in_npc._Money.split(' Gold Coins')
-                splits_silver = in_npc._Money.split(' Silver Coins')
-                splits_brass = in_npc._Money.split(' Brass Coins')
-                if splits_gold[0].isdecimal():
-                    values[0] += int(splits_gold[0])
-                if splits_silver[0].isdecimal():
-                    values[1] += int(splits_silver[0])
-                if splits_brass[0].isdecimal():
-                    values[2] += int(splits_brass[0])
-
-                # roll
-                ParsedSocial = SocialString.split(" ")
-                if ParsedSocial[0] == "Gold":
-                    money = ParsedSocial[1] + " Gold Coins."
-                elif ParsedSocial[0] == "Silver":
-                    money = str(rollXd10(int(ParsedSocial[1]))) + " Silver Coins."
-                elif ParsedSocial[0] == "Brass":
-                    money = str(rollXd10(int(ParsedSocial[1]) * 2)) + " Brass Coins."
-                else:
-                    money = "0 Brass Coins."
-
-                # new values
-                splits_gold = money.split(' Gold Coins')
-                splits_silver = money.split(' Silver Coins')
-                splits_brass = money.split(' Brass Coins')
-                if splits_gold[0].isdecimal():
-                    values[0] += int(splits_gold[0])
-                if splits_silver[0].isdecimal():
-                    values[1] += int(splits_silver[0])
-                if splits_brass[0].isdecimal():
-                    values[2] += int(splits_brass[0])
-                out_str = []
-                if values[0] > 0:
-                    out_str.append(f'{values[0]} Gold Coins')
-                if values[1] > 0:
-                    out_str.append(f'{values[1]} Silver Coins')
-                if values[2] > 0:
-                    out_str.append(f'{values[1]} Brass Coins')
-
-                return ', '.join(out_str)
-
-            is_ready = False
-            if npc.career_level == 1:
-                stats_adv = [npc._StatsAdvance[idx] for idx in CareerAdvanceL1[npc._CareerN]]
-                sum_adv = 5
-                new_level = {"name": CareerL2[npc._CareerN], "status": CareerSocialL2[npc._CareerN], "skills": CareerSkillL2[npc._CareerN], "trapping": TrappingCareerL2[npc._CareerN], "money": CareerSocialL2[npc._CareerN]}
-            elif npc.career_level == 2:
-                stats_adv = [npc._StatsAdvance[idx] for idx in CareerAdvanceL2[npc._CareerN]]
-                sum_adv = 10
-                new_level = {"name": CareerL3[npc._CareerN], "status": CareerSocialL3[npc._CareerN], "skills": CareerSkillL3[npc._CareerN], "trapping": TrappingCareerL3[npc._CareerN], "money": CareerSocialL3[npc._CareerN]}
-            elif npc.career_level == 3:
-                stats_adv = [npc._StatsAdvance[idx] for idx in CareerAdvanceL3[npc._CareerN]]
-                sum_adv = 15
-                new_level = {"name": CareerL4[npc._CareerN], "status": CareerSocialL4[npc._CareerN], "skills": CareerSkillL4[npc._CareerN], "trapping": TrappingCareerL4[npc._CareerN], "money": CareerSocialL4[npc._CareerN]}
-            else:
-                return xp_val, is_ready
-            # stats from career lvl >= sum_adv
-            # 8 skills values >= sum_adv
-            # 1 talent from career lvl
-            # 100 xp
-            if False not in \
-                    [val >= sum_adv for val in stats_adv] + \
-                    [sum([1 for val in npc._SkillValues if val >= sum_adv]) >= 8] + \
-                    [sum(1 for val in npc._TalentValues if val >= 1) >= 1] + \
-                    [xp_val >= 100]:
-                is_ready = True
-                # deduct xp
-                xp_val -= 100
-                # new: career name, social status
-                npc._CareerName = new_level["name"]
-                npc.career = npc._CareerName
-                npc.career_level += 1
-                npc.status = new_level["status"]
-                # new: skills (value=0)
-                skills_by_career = new_level["skills"]
-                skills_values = [0]*len(skills_by_career)
-                for skill_name, skill_value in zip(skills_by_career, skills_values):
-                    npc._SkillNames.append(skill_name)
-                    npc._SkillValues.append(skill_value)
-                npc._SkillNames = npc.parse_skill_words(npc._SkillNames)
-                # don't need to add talents - they will be added during next advances
-                # new: trapping (add)
-                npc._Trapping = npc._Trapping + ', ' + rollTrappings(new_level["trapping"])
-                npc.trapping = npc._Trapping
-                # new money (add)
-                npc._Money = rollMoney(new_level["money"], npc)
-                npc.money = npc._Money
-
-                return xp_val, is_ready
-            else:
-                return xp_val, is_ready
-        if xp is None:
-            xp = self.xp_start
-        # ------------------------------------------------------
-        xp = advance_talents(xp, self)
-        self._TalentNames = self.parse_talent_words(self._TalentNames)  # new talents are added
-        self.modify_stats_by_talents()
-        self.update_all()
-        # ------------------------------------------------------
-        xp = advance_stats(xp, self)
-        self.update_all()
-        # ------------------------------------------------------
-        xp = advance_skills(xp, self)
-        self.update_all()
-        # ------------------------------------------------------
-        # advance to new level?
-        xp, ready = advance_next_level(xp, self)
-        self.update_all()
-        if ready:
-            self.advance_by_xp(xp)
-        else:
-            self.xp_left = xp
+    """
 
 
-    @staticmethod
-    def parse_skill_words(skill_names):
-        # (Any one)
-        for i in range(len(skill_names)):
-            skill_name = skill_names[i]
-            if skill_name.find("(Any one)") >= 0:
-                for s_list in AnySkills:
-                    if skill_name in s_list:
-                        skill_names[i] = s_list[random.randint(1, len(s_list) - 1)]
-                        break
-        return skill_names
-    @staticmethod
-    def parse_talent_words(talent_names):
-        for i in range(len(talent_names)):
-            talent_name = talent_names[i]
-            # sth " or " sth
-            if talent_name.find(" or ") >= 0:
-                two_talents = talent_name.split(" or ")
-                talent_names[i] = two_talents[random.randint(0, 1)]      # pick one of two talents
-            # Random
-            if talent_name == "Random":
-                roll_val = roll1d100()
-                j = 0
-                while j < len(TalentRandom):
-                    if roll_val <= TalentRandom[j]:
-                        break
-                    j += 1
-                talent_names[i] = TalentRandomName[j]   # pick from random table (TalentRandomName)
-            # (Any one)
-            if talent_name.find("(Any one)") >= 0:
-                for t_list in AnyTalents:
-                    if talent_name in t_list:
-                        talent_names[i] = t_list[random.randint(1, len(t_list) - 1)]
-                        break
-        return talent_names
-    def update_attributes(self):
-        # INTERNAL
-        #   * _StatsTotal
-        self._StatsTotal = [val1 + val2 for val1, val2 in zip(self._StatsBase, self._StatsAdvance)]
-        #   * Wounds (_StatsOther[0])
-        bS = self._StatsTotal[2] // 10
-        bT = self._StatsTotal[3] // 10
-        bWP = self._StatsTotal[8] // 10
-        if self._SpeciesN == 0:  # "Human"
-            self._StatsOther[0] = bS + 2 * bT + bWP
-        elif self._SpeciesN == 1:  # "Dwarf"
-            self._StatsOther[0] = bS + 2 * bT + bWP
-        elif self._SpeciesN == 2:  # "Halfling"
-            self._StatsOther[0] = 2 * bT + bWP
-        elif self._SpeciesN == 3:  # "High Elf"
-            self._StatsOther[0] = bS + 2 * bT + bWP
-        elif self._SpeciesN == 4:  # "Wood Elf"
-            self._StatsOther[0] = bS + 2 * bT + bWP
-        elif self._SpeciesN == 5:  # "Gnome"
-            self._StatsOther[0] = 2 * bT + bWP
-        # EXTERNAL
-        self.attributes = {"WS": [self._StatsBase[0], self._StatsAdvance[0], self._StatsTotal[0]],
-                           "BS": [self._StatsBase[1], self._StatsAdvance[1], self._StatsTotal[1]],
-                           "S":  [self._StatsBase[2], self._StatsAdvance[2], self._StatsTotal[2]],
-                           "T":  [self._StatsBase[3], self._StatsAdvance[3], self._StatsTotal[3]],
-                           "AG": [self._StatsBase[4], self._StatsAdvance[4], self._StatsTotal[4]],
-                           "I":  [self._StatsBase[5], self._StatsAdvance[5], self._StatsTotal[5]],
-                           "DEX":[self._StatsBase[6], self._StatsAdvance[6], self._StatsTotal[6]],
-                           "INT":[self._StatsBase[7], self._StatsAdvance[7], self._StatsTotal[7]],
-                           "WP" :[self._StatsBase[8], self._StatsAdvance[8], self._StatsTotal[8]],
-                           "FEL":[self._StatsBase[9], self._StatsAdvance[9], self._StatsTotal[9]],
-                           "Wounds":    [self._StatsOther[0], self._StatsOther[0], self._StatsOther[0]],
-                           "MoveSpeed": [self._StatsOther[1], self._StatsOther[1], self._StatsOther[1]],
-                           "Fate":      [self._StatsOther[2], self._StatsOther[2], self._StatsOther[2]],
-                           "Resilience":[self._StatsOther[3], self._StatsOther[3], self._StatsOther[3]]}
-    def update_skills(self):
-        # EXTERNAL
-        #   basic
-        found_total = []
-        out = {}  # {skill_name: [stat_str, stat_total, skill_advances, skill_total]}
-        for skill_name in data_SkillsBasic.keys():     # e.g. "Animal Training"
-            skill_list = data_SkillsBasic[skill_name]  # e.g: ["INT", "advanced", ["Demigryph", "Dog", "Horse", "Pegasus", "Pigeon"]]
-            found = False
-            for i in range(len(self._SkillNames)):
-                if skill_name.split(' (')[0] == self._SkillNames[i].split(' (')[0]:
-                    stat_str = skill_list[0]  # e.g. "INT"
-                    stat_total = self._StatsTotal[StatsName.index(stat_str)]  # e.g. =20
-                    skill_advances = self._SkillValues[i]  # e.g. "Animal Training"=5
-                    skill_total = stat_total + skill_advances  # e.g. =25
-                    out.update({self._SkillNames[i]: [stat_str, stat_total, skill_advances, skill_total]})
-                    found = True
-                    found_total.append(self._SkillNames[i])
-            if not found:
-                stat_str = skill_list[0]
-                stat_total = self._StatsTotal[StatsName.index(stat_str)]
-                skill_advances = 0
-                skill_total = stat_total + skill_advances
-                out.update({skill_name: [stat_str, stat_total, skill_advances, skill_total]})
-        #   special for 'Meele' - leave just one, the highest
-
-        self.skills_basic = out
-
-        #   advanced
-        out = {}  # {skill_name: [stat_str, stat_total, skill_advances, skill_total]}
-        for skill_name in data_SkillsAdvanced.keys():     # e.g. "Animal Training"
-            skill_list = data_SkillsAdvanced[skill_name]  # e.g: ["INT", "advanced", ["Demigryph", "Dog", "Horse", "Pegasus", "Pigeon"]]
-            found = False
-            for i in range(len(self._SkillNames)):
-                if skill_name.split(' (')[0] == self._SkillNames[i].split(' (')[0]:
-                    stat_str = skill_list[0]                                    # e.g. "INT"
-                    stat_total = self._StatsTotal[StatsName.index(stat_str)]    # e.g. =20
-                    skill_advances = self._SkillValues[i]                       # e.g. "Animal Training"=5
-                    skill_total = stat_total + skill_advances                   # e.g. =25
-                    out.update({self._SkillNames[i]: [stat_str, stat_total, skill_advances, skill_total]})
-                    found = True
-                    found_total.append(self._SkillNames[i])
-            if not found:
-                stat_str = skill_list[0]
-                stat_total = self._StatsTotal[StatsName.index(stat_str)]
-                skill_advances = 0
-                skill_total = stat_total + skill_advances
-                out.update({skill_name: [stat_str, stat_total, skill_advances, skill_total]})
-
-        # filter only skills with at least 1 advance
-        out2 = {}
-        for skill_name, values_list in out.items():
-            if values_list[2] > 0:
-                out2.update({skill_name: values_list})
-        self.skills_advanced = out2
-        if len(found_total) != len(self._SkillNames): print("Not all skills were found", 'FOUND:', found_total, 'ALL:', self._SkillNames)
-
-    def update_talents(self):
-        # EXTERNAL
-        out = {}
-        for _talent_name in self._TalentNames:  # e.g.  "Accurate Shot": ["Bonus BS", "BS", "+[lvl]dmg on all ranged weapons."],
-            idx, test, desc = None, None, None
-            for i, val_str in enumerate(data_Talents.keys()):
-                if _talent_name.split(' (')[0] == val_str.split(' (')[0]:
-                    idx, test, desc = i, data_Talents[val_str][1], data_Talents[val_str][2]
-
-            if None not in [idx, test, desc]:
-                out.update({_talent_name: (test, desc)})  # {talent_name: (test, description)}
-            else:
-                print("!!Talent not found\t" + _talent_name)
-
-        self.talents = out
-    def update_all(self):
-        self.update_attributes()
-        self.update_skills()
-        self.update_talents()
 

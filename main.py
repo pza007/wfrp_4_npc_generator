@@ -1,13 +1,16 @@
-"""
-inspect page
-Network, Fetch/XHR, copy as cURL/bash
-convert to python: https://curlconverter.com/
-"""
-from classes import NpcSingleton
-from functions import put_text_to_image
+from functions import user_interface
 
-npc = NpcSingleton()
-npc.roll_npc()
-npc.advance_by_xp()
-#npc.present()
-put_text_to_image(npc)
+
+def main():
+    user_interface()
+
+
+if __name__ == '__main__':
+    main()
+
+# TODO
+# - continue advancing after reaching career lvl 4?
+# - age=6, career lvl 4? possible??
+
+# To generate .exe using nuitka, use command:
+#   python -m nuitka --onefile --include-data-dir=imgs=imgs --windows-icon-from-ico=imgs\_icon.ico main.py

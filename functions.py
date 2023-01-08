@@ -2,6 +2,108 @@ import requests
 from bs4 import BeautifulSoup
 import random
 from PIL import Image, ImageDraw, ImageFont
+import pyinputplus as pyin
+from prettytable import PrettyTable
+from classes import NpcSingleton
+
+
+############################################################################
+# USER INTERFACE
+def user_interface():
+    from constants import sex_all, species_all, age_all, species_random
+    from constants import class_by_species, careers_by_species, careers_by_class
+
+    header = '#############################################################\n' \
+             '  NPC generator for Warhammer Fantasy Roleplay 4th edition\n' \
+             '    git repository:\n' \
+             '    https://github.com/pza007/wfrp_4_npc_generator.git\n' \
+             '#############################################################\n'
+    print(header)
+
+    f_all_rand = pyin.inputStr(prompt='>>>>> Choose all random settings? (y/n):\n')
+    if f_all_rand in ['y','Y']:
+        # ALL RANDOM
+        in_sex, in_species, in_age, in_class, in_career, in_xp = 'Any', 'Any', 'Any', 'Any', 'Any', 'Any'
+        out_sex = random_pick(sex_all)
+        out_species = random_pick(species_random)
+        out_age = random_pick(age_all)
+        list_classes = class_by_species[out_species]
+        out_class = random_pick(list_classes)
+        list_careers = list(set(careers_by_class[out_class]) & set(careers_by_species[out_species]))
+        out_career = random_pick(list_careers)
+        out_xp = random.randint(500, 10000) + 75
+    else:
+        # USER INPUTS
+        # ---SEX
+        in_sex = pyin.inputMenu(prompt='>>>>> Please choose sex:\n', choices=['Any']+sex_all, numbered=True)
+        if in_sex == 'Any':
+            out_sex = random_pick(sex_all)
+        else:
+            out_sex = in_sex
+        # ---SPECIES
+        in_species = pyin.inputMenu(prompt='>>>>> Please choose species:\n', choices=['Any']+species_all, numbered=True)
+        if in_species == 'Any':
+            out_species = random_pick(species_random)
+        else:
+            out_species = in_species
+        # ---AGE
+        in_age = pyin.inputMenu(prompt='>>>>> Please choose age:\n', choices=['Any']+age_all, numbered=True)
+        if in_age == 'Any':
+            out_age = random_pick(age_all)
+        else:
+            out_age = in_age
+        # ---CLASS
+        list_classes = list(set(class_by_species[out_species]))
+        in_class = pyin.inputMenu(prompt='>>>>> Please choose class:\n', choices=['Any']+list_classes, numbered=True)
+        if in_class == 'Any':
+            out_class = random_pick(list_classes)
+        else:
+            out_class = in_class
+        # ---CAREER
+        list_careers = list(set(careers_by_class[out_class]) & set(careers_by_species[out_species]))
+        in_career = pyin.inputMenu(prompt='>>>>> Please choose career:\n', choices=['Any']+list_careers, numbered=True)
+        if in_career == 'Any':
+            out_career = random_pick(list_careers)
+        else:
+            out_career = in_career
+        # ---XP
+        in_xp = pyin.inputInt(prompt='>>>>> Please enter number ef experience points (XP): ')
+        out_xp = in_xp
+        # additional xp for randomization
+        if in_species == 'Any':
+            out_xp += 25
+        if in_class == 'Any' and in_career == 'Any':
+            out_xp += 50
+
+    # SUMMARIES
+    print('\nYour choices:')
+    table = [['Sex', 'Species', 'Age', 'Class', 'Career', 'XP'],
+             [in_sex, in_species, in_age, in_class, in_career, in_xp]]
+    tab = PrettyTable(table[0])
+    tab.add_rows(table[1:])
+    print(tab)
+    print('\nRoll values:')
+    table = [['Sex', 'Species', 'Age', 'Class', 'Career', 'XP'],
+             [out_sex, out_species, out_age, out_class, out_career, out_xp]]
+    tab = PrettyTable(table[0])
+    tab.add_rows(table[1:])
+    print(tab)
+
+    # GENERATIONS
+    print('\nGenerating NPC, please wait...')
+
+    npc = NpcSingleton()
+    npc.get_init_values(**{'sex': out_sex,
+                           'species': out_species,
+                           'age': out_age,
+                           'class': out_class,
+                           'career': out_career,
+                           'xp': out_xp})
+    npc.roll_npc()
+    npc.advance_by_xp()
+    put_text_to_image(npc)
+    print('\nDone! File "npc.png" saved in local directory.')
+    print(f'xp left={npc.xp_left}')
 
 
 ############################################################################
@@ -22,7 +124,7 @@ def roll1d100():
     return random.randint(1, 100)
 
 
-def randPick(in_list):
+def random_pick(in_list):
     return in_list[random.randint(0, len(in_list)-1)]
 
 
@@ -78,7 +180,7 @@ def get_text(in_request, in_npc):
         }
         data = {
             'event': 'Generate',
-            'sex': in_npc.sex_str,
+            'sex': in_npc.sex,
             'type': 'Realistic',
             'detail': 'Simple',
             'beard': 'RandomFhair',
@@ -98,8 +200,8 @@ def get_text(in_request, in_npc):
     return out_text
 
 
-def adjust_text(text_str, sex_str):
-    if sex_str == 'Male':
+def adjust_text(text_str, sex):
+    if sex == 'Male':
         person = 'he'
     else:  # == 'Female'
         person = 'she'
@@ -114,11 +216,11 @@ def adjust_text(text_str, sex_str):
     text_str = text_str.replace("don't ", "doesn't ")
     text_str = text_str.replace("do ", "does ")
     if text_str.find('their'):
-        if sex_str == 'Male': text_str = text_str.replace("their", "his")
-        if sex_str == 'Female': text_str = text_str.replace("their", "her")
+        if sex == 'Male': text_str = text_str.replace("their", "his")
+        if sex == 'Female': text_str = text_str.replace("their", "her")
     if text_str.find('them'):
-        if sex_str == 'Male': text_str = text_str.replace("their", "him")
-        if sex_str == 'Female': text_str = text_str.replace("their", "her")
+        if sex == 'Male': text_str = text_str.replace("their", "him")
+        if sex == 'Female': text_str = text_str.replace("their", "her")
     # remove height information - e.g. ' A 5' 10" tall,'
     if text_str.find(' tall,') >= 0:
         text_str = text_str[text_str.find(' tall,') + 7:]
@@ -136,7 +238,7 @@ def get_traits(in_npc):
     in_text = get_text('traits', in_npc)
     # general look
     out_general_look = in_text[38: in_text.find('They:')]
-    out_general_look, person = adjust_text(out_general_look, in_npc.sex_str)
+    out_general_look, person = adjust_text(out_general_look, in_npc.sex)
     out_general_look = person + ' looks ' + out_general_look
 
     # traits
@@ -149,7 +251,7 @@ def get_traits(in_npc):
     tmp_text = tmp_text.replace('Are your characters in a SITUATION? Do they need to solve a PROBLEM?', '')
     tmp_text = tmp_text.replace('These trait suggestions show how this character performs when the need arises.', '')
 
-    tmp_text, person = adjust_text(tmp_text, in_npc.sex_str)
+    tmp_text, person = adjust_text(tmp_text, in_npc.sex)
     out_traits = []
     i_start, i_end = (None, None)
     for i in range(len(tmp_text)-1):
@@ -176,7 +278,7 @@ def get_appearance(in_npc):
     in_text = get_text('appearance', in_npc)
     # appearance
     tmp_text = in_text[4:in_text.find('2 -')]
-    tmp_text, person = adjust_text(tmp_text, in_npc.sex_str)
+    tmp_text, person = adjust_text(tmp_text, in_npc.sex)
     tmp_text = tmp_text.split('. ')
     out_appearance = [text for text in tmp_text if len(text) > 2]
     for i in range(len(out_appearance)):
@@ -184,7 +286,7 @@ def get_appearance(in_npc):
 
     return out_appearance
 
-# slabe tlumaczenie :(
+# poor ENG-POL translation - not used
 def translate(in_obj):
     """
     in_obj:  [str] or [list of str]
@@ -283,7 +385,6 @@ def put_text_to_image(npc):
             return in_text
 
     def draw_name_career_image(in_npc, in_draw, in_img):
-        from constants import CareerL2
         font = ImageFont.truetype('arial.ttf', 12)
         text_height = get_text_dimensions('Test', font)[1]
         fontb = ImageFont.truetype('arialbd.ttf', 14)
@@ -297,15 +398,20 @@ def put_text_to_image(npc):
         # name
         text = in_npc.name
         in_draw.text((x_start + get_padx_center(text, fontb, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=fontb, align="center")
-        # career and lvl
+        # career current
         y_start = y_end + 3
         y_end = y_start + text_height + pad_y
-        text = in_npc.career + f' ({in_npc.career_level})'
+        text = f'Career (lvl {in_npc.career_level+1}): {in_npc.career_current.name}'
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+        # career main
+        y_start = y_end
+        y_end = y_start + text_height + pad_y
+        text = f'Career path: {in_npc.career_main_name}'
         in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
         # class
         y_start = y_end
         y_end = y_start + text_height + pad_y
-        text = f'[{in_npc.ch_class}]'
+        text = f'Class: {in_npc.ch_class}'
         in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
         # species, age
         y_start = y_end
@@ -320,19 +426,19 @@ def put_text_to_image(npc):
 
         # image by sex and career
         ch_img_name = 'imgs\\'
-        if in_npc.sex_str == 'Male':
+        if in_npc.sex == 'Male':
             ch_img_name += 'm_'
         else:
             ch_img_name += 'f_'
-        ch_img_name += CareerL2[in_npc._CareerN] + '.png'
+        ch_img_name += npc.career_main_name + '.png'
         ch_img = Image.open(ch_img_name)
         y_start = y_end + 10
         y_end = y_start + ch_img.size[1]
 
         padding_x = (x_end - x_start - ch_img.size[0]) // 2
-        padding_y = (gl_h_lines[1] - y_start - ch_img.size[1]) // 2
+        #padding_y = (gl_h_lines[1] - y_start - ch_img.size[1]) // 2
 
-        in_img.paste(ch_img, (x_start+padding_x, y_start+padding_y), ch_img)
+        in_img.paste(ch_img, (x_start+padding_x, y_start), ch_img)
 
         return y_end
 
@@ -494,7 +600,7 @@ def put_text_to_image(npc):
         text = 'Talent'
         x_start = gl_v_lines[0]
         x_end = v_line_middle
-        y_start = in_y_start + 30
+        y_start = in_y_start + 20
         y_end = y_start + (pad_y + text_height + pad_y)
         in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
         in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
@@ -523,11 +629,14 @@ def put_text_to_image(npc):
         # draw
         for talent_name, talent_test, talent_description in _talents:
             # name
-            text = shorten_text(talent_name, font, max_w=95)
+            #text = shorten_text(talent_name, font, max_w=95)
             x_start = gl_v_lines[0]
             x_end = v_line_middle
             y_start = y_end
-            in_draw.text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+            #in_draw.text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+            text = format_long_text(talent_name, font, max_w=95)
+            y_end0 = y_start + (pad_y + text_height) * (1 + text.count('\n'))
+            in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
 
             # test
             if len(talent_test) <= 0:
@@ -547,7 +656,8 @@ def put_text_to_image(npc):
             in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
 
             # lines
-            y_end = max([y_end1, y_end2])
+            #y_end = max([y_end1, y_end2])
+            y_end = max([y_end0, y_end1, y_end2])
             in_draw.line([(gl_v_lines[0], y_end), (gl_v_lines[2], y_end)], fill="black", width=1)
             in_draw.line([(gl_v_lines[0], y_start), (gl_v_lines[0], y_end)], fill="black", width=1)
             in_draw.line([(v_line_middle, y_start), (v_line_middle, y_end)], fill="black", width=1)
@@ -593,7 +703,7 @@ def put_text_to_image(npc):
             for dx in range(cell_width, cell_width*10-1, cell_width):
                 in_draw.line([(x_start+dx, y_start), (x_start+dx, y_end)], fill="black", width=1)
 
-            values = [str(npc.attributes[stat_name][i]) for stat_name in stat_names]
+            values = [str(in_npc.attributes[stat_name][i]) for stat_name in stat_names]
             for j, text in enumerate(values):
                 padding = get_padx_center(text, in_font, x_start + j*cell_width, x_start + (j+1)*cell_width)
                 in_draw.text((x_start + padding + j*cell_width, y_start + pad_y), text, fill=(0, 0, 0, 255), font=in_font, align="left")
@@ -617,7 +727,7 @@ def put_text_to_image(npc):
             x_start = x_end
             x_end = x_end + cell_width
             in_draw.rectangle([(x_start, y_start), (x_end, y_end)], outline="black")
-            text = str(in_npc.attributes[name][0])
+            text = str(in_npc.attributes[name][2])  # total value
             padding = get_padx_center(text, fontb, x_start, x_end)
             in_draw.text((x_start + padding, y_start + pad_y), text, fill=(0, 0, 0, 255), font=in_font2, align="left")
             # line
@@ -750,7 +860,7 @@ def put_text_to_image(npc):
         sheet_end = Image.open('imgs\\sheet_end.png')
         x_start = 0
         x_end = gl_v_lines[-1]
-        y_start = in_y_start + 1
+        y_start = in_y_start + 5
         y_end = y_start + sheet_end.size[1]
         in_img.paste(sheet_end, (x_start, y_start), sheet_end)
 
@@ -773,4 +883,11 @@ def put_text_to_image(npc):
     x_end5, y_end5 = draw_basic_skill_table(npc, draw, y_end4)
     y_end6 = draw_advanced_skill_table(npc, draw, x_end5, y_end4)
 
-    finish(img, max([y_end1, y_end2, y_end3]))
+    finish(img, max([y_end1, y_end2, y_end3, y_end4, y_end5, y_end6]))
+
+
+"""
+HOW TO inspect page?
+Network, Fetch/XHR, copy as cURL/bash
+convert to python: https://curlconverter.com/
+"""
