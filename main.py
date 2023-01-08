@@ -10,5 +10,5 @@ if __name__ == '__main__':
 
 """
 HOW TO generate .exe with nuitka? Use command:
-python -m nuitka --onefile --include-data-dir=imgs=imgs --windows-icon-from-ico=imgs\_icon.ico main.py
+python -m nuitka --standalone --include-data-dir=imgs=imgs --windows-icon-from-ico=imgs\_icon.ico main.py
 """
