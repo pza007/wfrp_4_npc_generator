@@ -41,7 +41,7 @@ def user_interface():
         else:
             out_sex = in_sex
         # ---SPECIES
-        in_species = pyin.inputMenu(prompt='>>>>> Please choose species:\n', choices=['Any']+species_all, numbered=True)
+        in_species = pyin.inputMenu(prompt='>>>>> Please choose species:\n', choices=['Any']+sorted(species_all), numbered=True)
         if in_species == 'Any':
             out_species = random_pick(species_random)
         else:
@@ -54,20 +54,20 @@ def user_interface():
             out_age = in_age
         # ---CLASS
         list_classes = list(set(class_by_species[out_species]))
-        in_class = pyin.inputMenu(prompt='>>>>> Please choose class:\n', choices=['Any']+list_classes, numbered=True)
+        in_class = pyin.inputMenu(prompt='>>>>> Please choose class:\n', choices=['Any']+sorted(list_classes), numbered=True)
         if in_class == 'Any':
             out_class = random_pick(list_classes)
         else:
             out_class = in_class
         # ---CAREER
         list_careers = list(set(careers_by_class[out_class]) & set(careers_by_species[out_species]))
-        in_career = pyin.inputMenu(prompt='>>>>> Please choose career:\n', choices=['Any']+list_careers, numbered=True)
+        in_career = pyin.inputMenu(prompt='>>>>> Please choose career:\n', choices=['Any']+sorted(list_careers), numbered=True)
         if in_career == 'Any':
             out_career = random_pick(list_careers)
         else:
             out_career = in_career
         # ---XP
-        in_xp = pyin.inputInt(prompt='>>>>> Please enter number ef experience points (XP): ')
+        in_xp = pyin.inputInt(prompt='>>>>> Please enter number of experience points (XP): ')
         out_xp = in_xp
         # additional xp for randomization
         if in_species == 'Any':
@@ -101,9 +101,10 @@ def user_interface():
                            'xp': out_xp})
     npc.roll_npc()
     npc.advance_by_xp()
+    npc.advance_continue(npc.xp_left)
     put_text_to_image(npc)
     print('\nDone! File "npc.png" saved in local directory.')
-    print(f'xp left={npc.xp_left}')
+    print(f'Experience points left = {npc.xp_left}')
 
 
 ############################################################################

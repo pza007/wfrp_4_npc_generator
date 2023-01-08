@@ -5,14 +5,22 @@
 
 ## Overview ##
 [Overview]: #overview
-Generate random Non Player Character (NPC) in the world of WARHAMMER Fantasy Roleplay 4th edition
+Generate random Non Player Character (NPC) in the world of WARHAMMER Fantasy Roleplay 4th edition.
 
 ## Getting started ##
 [Overview]: #getting_started
-1. Edit config.txt file
-2. Run *.exe file
-3. Prieview file and close window.
-3. Enjoy the output *.png file placed in the directory of *.exe file!
+1. Run *.exe file.
+2. Provide user inputs.
+3. Preview pop-up image and close the window.
+4. Enjoy the output file: npc.png (placed in the directory of *.exe file).
+
+## Used libraries ##
+- requests: fetch data from web-page (e.g. generated npc's appearance)
+- BeautifulSoup: parse data from web-page
+- PIL: put data onto image file
+- pyinputplus: handle user input
+- prettytable: parse data
+
 
 ## Report bugs ##
 [Open Issue directly][] - note that you need a GitHub account.

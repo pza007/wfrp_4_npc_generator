@@ -11,6 +11,7 @@ class NpcSingleton(object):
     def __init__(self):
         self.sex = None               # [str] 'Male' or 'Female'
         self.species = None           # [str] "Human", "Dwarf", "Halfling", "High Elf", "Wood Elf", "Gnome"
+        self.age_str = None           # [str] 'Young', 'Middle', 'Old'
         self.age = None               # [int] in years
         self.height = None            # [float] in meters
         self.name = None              # [str] Name and Surname
@@ -45,13 +46,13 @@ class NpcSingleton(object):
         self.sex = kwargs.get('sex')
         self.species = kwargs.get('species')
         # roll age in boundaries
-        in_age = kwargs.get('age')
+        self.age_str = kwargs.get('age')
         age_range = age_by_species[self.species]
-        if in_age == 'Young':
+        if self.age_str == 'Young':
             low =  age_range[0]
             high = age_range[0]+abs(age_range[1]-age_range[0])//4
             self.age = random.randint(low, high)
-        elif in_age == 'Middle':
+        elif self.age_str == 'Middle':
             low =  age_range[1]-abs(age_range[2]-age_range[1])//4
             high = age_range[1]+abs(age_range[2]-age_range[1])//4
             self.age = random.randint(low, high)
@@ -97,15 +98,12 @@ class NpcSingleton(object):
         from functions import random_pick, rollXd10
         from constants import age_by_species, height_by_species
         # consider age
-        age_range = age_by_species[self.species]
-        new_ranges = [age_range[0] + abs(age_range[0]-age_range[1])/2,
-                      age_range[1] + abs(age_range[1]-age_range[2])/2]
         init_height = 0
-        if 0 < self.age <= new_ranges[0]:
+        if self.age_str == 'Young':
             init_height = height_by_species[self.species][0]
-        elif new_ranges[0] < self.age <= new_ranges[1]:
+        elif self.age_str == 'Middle':
             init_height = height_by_species[self.species][1]
-        else:
+        else:   # 'Old
             init_height = height_by_species[self.species][2]
         # roll height
         if self.species == "Human":
@@ -309,10 +307,10 @@ class NpcSingleton(object):
         self.update_attributes()
         self.update_skills()
 
-
-
     def advance_by_xp(self, xp=None):
-        # possible for levels: 1-3
+        """
+        Advance from career lvl 0 to lvl 3
+        """
         def advance_talents(xp_val):
             """
             Advance (by 1 value) all missing talents from current career
@@ -470,6 +468,12 @@ class NpcSingleton(object):
                             out_skills.update({skill_name: 0})
             # parse
             out_skills = self.parse_skill_words(out_skills)
+
+            # error?
+            if len(out_skills) != 8:
+                raise Exception(f'advance_stats:advance_skills -> less then 8 skills available, cannot advance.\n'
+                                f'career={self.career_current.name}, skill_names={skill_names}, out_skills={out_skills}')
+
             # advance
             for skill_name in out_skills.keys():
                 advance = out_skills[skill_name]
@@ -496,11 +500,12 @@ class NpcSingleton(object):
             -> 8 skills advanced: (already fulfilled)!
             -> at least 1 talent advanced: (already fulfilled)!
             -> 100 xp: ?
+            Note: for npc's age=='Young' only career lvl 0 is available
             :return: xp: int
             :return: boolean: Was there enough xp to advance to next career level?
             """
 
-            if xp_val >= 100:
+            if self.age_str != 'Young' and 0 <= self.career_level <= 2 and xp_val >= 100:
                 # deduct xp
                 xp_val -= 100
                 # switch to new career
@@ -522,32 +527,206 @@ class NpcSingleton(object):
 
         if xp is None:
             xp = self.xp_start
-        # ---- Talents
-        xp, f_full_advance = advance_talents(xp)
-        self.update_all()
-        if not f_full_advance:
-            self.xp_left = xp
-            return
-        # --- Stats
-        xp, f_full_advance = advance_stats(xp)
-        self.update_all()
-        if not f_full_advance:
-            self.xp_left = xp
-            return
-        # ---- Skills
-        xp, f_full_advance = advance_skills(xp)
-        self.update_all()
-        if not f_full_advance:
-            self.xp_left = xp
-            return
-        # ---- Advance to next level?
-        xp, f_advanced = advance_next_level(xp, self)
-        self.update_all()
-        if f_advanced:
-            self.advance_by_xp(xp)  # continue advancing...
-        else:
-            self.xp_left = xp
-            return
+
+        if 0 <= self.career_level <= 3:
+            # ---- Talents
+            xp, f_full_advance = advance_talents(xp)
+            self.update_all()
+            if not f_full_advance:
+                self.xp_left = xp
+                return
+            # --- Stats
+            xp, f_full_advance = advance_stats(xp)
+            self.update_all()
+            if not f_full_advance:
+                self.xp_left = xp
+                return
+            # ---- Skills
+            xp, f_full_advance = advance_skills(xp)
+            self.update_all()
+            if not f_full_advance:
+                self.xp_left = xp
+                return
+            # ---- Advance to next level?
+            xp, f_advanced = advance_next_level(xp, self)
+            self.update_all()
+            if f_advanced:
+                self.advance_by_xp(xp)  # continue advancing...
+            else:
+                self.xp_left = xp
+                return
+
+    def advance_continue(self, xp=None):
+        """
+        Continue advancing, after reaching career lvl 3
+        """
+        def advance_stats(xp_val):
+            """
+            ALL stats for current and previous careers -> advance to 'adv_sum' value
+            :return: xp: int
+            :return: boolean: Was there enough xp to fully advance in this domain?
+            """
+            def get_cost(stat_val):
+                if 0 <= stat_val <= 5:
+                    return 25
+                elif 6 <= stat_val <= 10:
+                    return 30
+                elif 11 <= stat_val <= 15:
+                    return 40
+                elif 16 <= stat_val <= 20:
+                    return 50
+                elif 21 <= stat_val <= 25:
+                    return 70
+                elif 26 <= stat_val <= 30:
+                    return 90
+                elif 31 <= stat_val <= 35:
+                    return 120
+                elif 36 <= stat_val <= 40:
+                    return 150
+                elif 41 <= stat_val <= 45:
+                    return 190
+                elif 46 <= stat_val <= 50:
+                    return 320
+                else:
+                    return (stat_val - 50) // 5 * 30 + 350  # own formula
+            cnt = 0
+
+            # get all stat names
+            stat_names = []
+            for i in range(0, self.career_level + 1):
+                stat_names = stat_names + self.career_main.lvl[i].advances  # e.g. ['T', 'DEX', 'INT']
+            # get adv sum
+            adv_sum = max([self.attributes[stat_name][1] for stat_name in stat_names]) + 10
+
+            # increase advance values
+            for stat_name in stat_names:
+                [base, advance, total] = self.attributes[stat_name]
+                if advance < adv_sum:
+                    for j in range(adv_sum - advance):
+                        current_advance = self.attributes[stat_name][1]
+                        cost = get_cost(current_advance)
+                        if xp_val >= cost:
+                            current_advance += 1
+                            current_total = base + current_advance
+                            # update!
+                            self.attributes.update({stat_name: [base, current_advance, current_total]})
+                            xp_val -= cost
+
+                if self.attributes[stat_name][1] >= adv_sum:
+                    cnt += 1
+
+            if cnt == len(stat_names):
+                return xp_val, True
+            else:
+                return xp_val, False
+        def advance_skills(xp_val):
+            """
+            ALL skills from current and previous careers -> advance to 'adv_sum' value
+            :return: xp: int
+            :return: boolean: Was there enough xp to fully advance in this domain?
+            """
+            def get_cost(skill_val):
+                if 0 <= skill_val <= 5:
+                    return 10
+                elif 6 <= skill_val <= 10:
+                    return 15
+                elif 11 <= skill_val <= 15:
+                    return 20
+                elif 16 <= skill_val <= 20:
+                    return 30
+                elif 21 <= skill_val <= 25:
+                    return 40
+                elif 26 <= skill_val <= 30:
+                    return 60
+                elif 31 <= skill_val <= 35:
+                    return 80
+                elif 36 <= skill_val <= 40:
+                    return 110
+                elif 41 <= skill_val <= 45:
+                    return 140
+                elif 46 <= skill_val <= 50:
+                    return 180
+                else:
+                    return (skill_val - 50) // 5 * 30 + 210  # own formula
+            cnt = 0
+
+            # get all skill names
+            skill_names = []
+            for i in range(self.career_level, -1, -1):
+                skill_names = skill_names + self.career_main.lvl[i].skills  # e.g. ['Lore (Any)', 'Track']
+            # get adv_sum
+            adv_sum = max([self.skills_basic[skill_name.split(' (')[0]][2] for skill_name in skill_names if skill_name.split(' (')[0] in self.skills_basic.keys()]) + 10
+
+            # get current advance values of skills
+            out_skills = {}  # {skill_name: advance_value}
+            for skill_name in skill_names:
+                name_short = skill_name.split(' (')[0]
+
+                # in skill_basic?
+                if name_short in self.skills_basic.keys():
+                    [_, _, skill_advances, _] = self.skills_basic[name_short]  # [stat_str, stat_total, skill_advances, skill_total]
+                    out_skills.update({skill_name: skill_advances})
+
+                # in skill_advanced?
+                else:
+                    # try skill's full name
+                    if skill_name in self.skills_advanced.keys():
+                        [_, _, skill_advances, _] = self.skills_advanced[skill_name]  # [stat_str, stat_total, skill_advances, skill_total]
+                        out_skills.update({skill_name: skill_advances})
+                    else:
+                        # skill name has '(Any one)' and there is according name in skill_advanced?
+                        if skill_name.find('(Any one)') >= 0 and name_short in [name.split(' (')[0] for name in self.skills_advanced.keys()]:
+                            # {skill_name: [stat_str, stat_total, skill_advances, skill_total]}
+                            tmp = [(name, val) for name, [_, _, val, _] in self.skills_advanced.items() if name.find(name_short) >= 0]
+                            tmp.sort()
+                            final_name = tmp[-1][0]  # pick skill with the highest advance value
+                            [_, _, skill_advances, _] = self.skills_advanced[final_name]
+                            out_skills.update({final_name: skill_advances})
+
+                        # skill name is new, even for skill_advanced
+                        else:
+                            out_skills.update({skill_name: 0})
+            # parse
+            out_skills = self.parse_skill_words(out_skills)
+            # advance
+            for skill_name in out_skills.keys():
+                advance = out_skills[skill_name]
+                if advance < adv_sum:
+                    for j in range(adv_sum - advance):
+                        cost = get_cost(advance)
+                        if xp_val >= cost:
+                            advance += 1
+                            # add to previous value!
+                            self.add_skills({skill_name: 1})
+                            xp_val -= cost
+
+                if advance >= adv_sum:
+                    cnt += 1
+
+            if cnt == len(out_skills):
+                return xp_val, True
+            else:
+                return xp_val, False
+
+        if xp is None:
+            xp = self.xp_start
+
+        if self.career_level == 3:
+            # --- Stats
+            xp, f_full_advance = advance_stats(xp)
+            self.update_all()
+            if not f_full_advance:
+                self.xp_left = xp
+                return
+            # ---- Skills
+            xp, f_full_advance = advance_skills(xp)
+            self.update_all()
+            if not f_full_advance:
+                self.xp_left = xp
+                return
+
+            # ---- Continue (if not returned at this point)
+            self.advance_continue(xp)
 
     def update_attributes(self):
         # stats - calculate all total values
