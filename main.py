@@ -7,6 +7,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+    input('\nPress any key to exit')
 
 """
 HOW TO generate .exe with nuitka? Use command:

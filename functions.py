@@ -1,3 +1,4 @@
+from logger_lib import logger
 import requests
 from bs4 import BeautifulSoup
 import random
@@ -7,20 +8,22 @@ from prettytable import PrettyTable
 from classes import NpcSingleton
 
 
-############################################################################
-# USER INTERFACE
 def user_interface():
     from constants import sex_all, species_all, age_all, species_random
     from constants import class_by_species, careers_by_species, careers_by_class
 
-    header = '#############################################################\n' \
+    header = '\n\n\n' \
+             '#############################################################\n' \
              '  NPC generator for Warhammer Fantasy Roleplay 4th edition\n' \
              '    git repository:\n' \
              '    https://github.com/pza007/wfrp_4_npc_generator.git\n' \
              '#############################################################\n'
-    print(header)
+    logger.debug(header)
 
-    f_all_rand = pyin.inputStr(prompt='>>>>> Choose all random settings? (y/n):\n')
+    logger.debug('>>>>> Choose all random settings? (y/n):\n')
+    f_all_rand = pyin.inputStr()
+    logger.debug(f'user input: {f_all_rand}')
+    #f_all_rand = pyin.inputStr(prompt='>>>>> Choose all random settings? (y/n):\n')
     if f_all_rand in ['y','Y']:
         # ALL RANDOM
         in_sex, in_species, in_age, in_class, in_career, in_xp = 'Any', 'Any', 'Any', 'Any', 'Any', 'Any'
@@ -31,43 +34,61 @@ def user_interface():
         out_class = random_pick(list_classes)
         list_careers = list(set(careers_by_class[out_class]) & set(careers_by_species[out_species]))
         out_career = random_pick(list_careers)
-        out_xp = random.randint(500, 10000) + 75
+        out_xp = random.randint(500, 20000) + 75
     else:
         # USER INPUTS
         # ---SEX
-        in_sex = pyin.inputMenu(prompt='>>>>> Please choose sex:\n', choices=['Any']+sex_all, numbered=True)
+        logger.debug('>>>>> Please choose sex:\n')
+        in_sex = pyin.inputMenu(choices=['Any'] + sex_all, numbered=True)
+        logger.debug(f'user input: {in_sex}')
+        #in_sex = pyin.inputMenu(prompt='>>>>> Please choose sex:\n', choices=['Any']+sex_all, numbered=True)
         if in_sex == 'Any':
             out_sex = random_pick(sex_all)
         else:
             out_sex = in_sex
         # ---SPECIES
-        in_species = pyin.inputMenu(prompt='>>>>> Please choose species:\n', choices=['Any']+sorted(species_all), numbered=True)
+        logger.debug('>>>>> Please choose species:\n')
+        in_species = pyin.inputMenu(choices=['Any'] + sorted(species_all), numbered=True)
+        logger.debug(f'user input: {in_species}')
+        #in_species = pyin.inputMenu(prompt='>>>>> Please choose species:\n', choices=['Any']+sorted(species_all), numbered=True)
         if in_species == 'Any':
             out_species = random_pick(species_random)
         else:
             out_species = in_species
         # ---AGE
-        in_age = pyin.inputMenu(prompt='>>>>> Please choose age:\n', choices=['Any']+age_all, numbered=True)
+        logger.debug('>>>>> Please choose age:\n')
+        in_age = pyin.inputMenu(choices=['Any'] + age_all, numbered=True)
+        logger.debug(f'user input: {in_age}')
+        #in_age = pyin.inputMenu(prompt='>>>>> Please choose age:\n', choices=['Any']+age_all, numbered=True)
         if in_age == 'Any':
             out_age = random_pick(age_all)
         else:
             out_age = in_age
         # ---CLASS
         list_classes = list(set(class_by_species[out_species]))
-        in_class = pyin.inputMenu(prompt='>>>>> Please choose class:\n', choices=['Any']+sorted(list_classes), numbered=True)
+        logger.debug('>>>>> Please choose class:\n')
+        in_class = pyin.inputMenu(choices=['Any'] + sorted(list_classes), numbered=True)
+        logger.debug(f'user input: {in_class}')
+        #in_class = pyin.inputMenu(prompt='>>>>> Please choose class:\n', choices=['Any']+sorted(list_classes), numbered=True)
         if in_class == 'Any':
             out_class = random_pick(list_classes)
         else:
             out_class = in_class
         # ---CAREER
         list_careers = list(set(careers_by_class[out_class]) & set(careers_by_species[out_species]))
-        in_career = pyin.inputMenu(prompt='>>>>> Please choose career:\n', choices=['Any']+sorted(list_careers), numbered=True)
+        logger.debug('>>>>> Please choose career:\n')
+        in_career = pyin.inputMenu(choices=['Any'] + sorted(list_careers), numbered=True)
+        logger.debug(f'user input: {in_career}')
+        #in_career = pyin.inputMenu(prompt='>>>>> Please choose career:\n', choices=['Any']+sorted(list_careers), numbered=True)
         if in_career == 'Any':
             out_career = random_pick(list_careers)
         else:
             out_career = in_career
         # ---XP
-        in_xp = pyin.inputInt(prompt='>>>>> Please enter number of experience points (XP): ')
+        logger.debug('>>>>> Please enter number of experience points (XP): ')
+        in_xp = pyin.inputInt()
+        logger.debug(f'user input: {in_xp}')
+        #in_xp = pyin.inputInt(prompt='>>>>> Please enter number of experience points (XP): ')
         out_xp = in_xp
         # additional xp for randomization
         if in_species == 'Any':
@@ -76,36 +97,49 @@ def user_interface():
             out_xp += 50
 
     # SUMMARIES
-    print('\nYour choices:')
+    logger.debug('\nYour choices:')
     table = [['Sex', 'Species', 'Age', 'Class', 'Career', 'XP'],
              [in_sex, in_species, in_age, in_class, in_career, in_xp]]
     tab = PrettyTable(table[0])
     tab.add_rows(table[1:])
-    print(tab)
-    print('\nRoll values:')
+    logger.debug(tab)
+    logger.debug('\nRoll values:')
     table = [['Sex', 'Species', 'Age', 'Class', 'Career', 'XP'],
              [out_sex, out_species, out_age, out_class, out_career, out_xp]]
     tab = PrettyTable(table[0])
     tab.add_rows(table[1:])
-    print(tab)
+    logger.debug(tab)
 
-    # GENERATIONS
-    print('\nGenerating NPC, please wait...')
+    # GENERATE
+    logger.debug('\nGenerating NPC, please wait...')
 
     npc = NpcSingleton()
+    logger.debug('\t- Init values...')
     npc.get_init_values(**{'sex': out_sex,
                            'species': out_species,
                            'age': out_age,
                            'class': out_class,
                            'career': out_career,
                            'xp': out_xp})
+    logger.debug('\t- Start values...')
     npc.roll_npc()
+    logger.debug('\t- Check values...')
+    npc.check_npc_1()
+    logger.debug('\t- Advance in career levels (1-4)...')
     npc.advance_by_xp()
-    npc.advance_continue(npc.xp_left)
-    put_text_to_image(npc)
-    print('\nDone! File "npc.png" saved in local directory.')
-    print(f'Experience points left = {npc.xp_left}')
 
+    if npc.career_level == 3:
+        logger.debug('\t- Continue advancing at career level 4...')
+        npc.advance_continue(npc.xp_left)
+
+    logger.debug('\t- Final modifications...')
+    npc.final_modifications()
+
+    logger.debug('\t- Generate image...')
+    file_name = put_text_to_image(npc)
+
+    logger.debug(f'\nDone! File: {file_name} saved in local directory.')
+    logger.debug(f'Experience points left = {npc.xp_left}')
 
 ############################################################################
 # ROLLS
@@ -601,69 +635,89 @@ def put_text_to_image(npc):
         text = 'Talent'
         x_start = gl_v_lines[0]
         x_end = v_line_middle
+        x0 = [x_start, x_end]
         y_start = in_y_start + 20
         y_end = y_start + (pad_y + text_height + pad_y)
         in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
         in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
         #   rectangle
+        text = 'L'  # level
+        x_start = x_end
+        x_end = x_start + 15
+        x1 = [x_start, x_end]
+        in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="center")
+        #   rectangle
         text = 'Test'
-        x_start = v_line_middle
+        x_start = x_end
         x_end = x_start + 100
+        x2 = [x_start, x_end]
         in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
         in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
         #   rectangle
         text = 'Description'
         x_start = x_end
         x_end = gl_v_lines[2]
+        x3 = [x_start, x_end]
         in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
         in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
 
         # DESCRIPTIONS
         #   reshuffle talents (permanent at the end)
         _talents = []
-        for talent_name, (talent_test, talent_description) in in_npc.talents.items():
+        for talent_name, (talent_test, talent_advance, talent_description) in in_npc.talents.items():
             if talent_description.find('Permanent') < 0:
-                _talents.append([talent_name, talent_test, talent_description])
-        for talent_name, (talent_test, talent_description) in in_npc.talents.items():
+                _talents.append([talent_name, talent_test, talent_advance, talent_description])
+        for talent_name, (talent_test, talent_advance, talent_description) in in_npc.talents.items():
             if talent_description.find('Permanent') >= 0:
-                _talents.append([talent_name, talent_test, talent_description])
+                _talents.append([talent_name, talent_test, talent_advance, talent_description])
         # draw
-        for talent_name, talent_test, talent_description in _talents:
-            # name
+        for talent_name, talent_test, talent_advance, talent_description in _talents:
+            # Name
             #text = shorten_text(talent_name, font, max_w=95)
-            x_start = gl_v_lines[0]
-            x_end = v_line_middle
+            x_start, x_end = x0
             y_start = y_end
             #in_draw.text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
             text = format_long_text(talent_name, font, max_w=95)
             y_end0 = y_start + (pad_y + text_height) * (1 + text.count('\n'))
             in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
 
-            # test
+            # Advance
+            text = str(talent_advance)
+            x_start, x_end = x1
+            y_end1 = y_start + (pad_y + text_height) * (1+text.count('\n'))
+            in_draw.text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="center")
+
+            # Test
             if len(talent_test) <= 0:
                 text = talent_test
             else:
                 text = format_long_text(talent_test, font, max_w=95)
-            x_start = x_end
-            x_end = x_start + 100
-            y_end1 = y_start + (pad_y + text_height) * (1+text.count('\n'))
+            x_start, x_end = x2
+            y_end2 = y_start + (pad_y + text_height) * (1+text.count('\n'))
             in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
 
-            # description
-            text = format_long_text(talent_description, font, max_w=560-100)
-            x_start = x_end
-            x_end = gl_v_lines[2]
-            y_end2 = y_start + (pad_y + text_height) * (1+text.count('\n'))
+            # Description
+            text = format_long_text(talent_description, font, max_w=560-100-15)
+            x_start, x_end = x3
+            y_end3 = y_start + (pad_y + text_height) * (1+text.count('\n'))
             in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
 
             # lines
             #y_end = max([y_end1, y_end2])
-            y_end = max([y_end0, y_end1, y_end2])
-            in_draw.line([(gl_v_lines[0], y_end), (gl_v_lines[2], y_end)], fill="black", width=1)
-            in_draw.line([(gl_v_lines[0], y_start), (gl_v_lines[0], y_end)], fill="black", width=1)
-            in_draw.line([(v_line_middle, y_start), (v_line_middle, y_end)], fill="black", width=1)
-            in_draw.line([(v_line_middle+100, y_start), (v_line_middle+100, y_end)], fill="black", width=1)
-            in_draw.line([(gl_v_lines[2], y_start), (gl_v_lines[2], y_end)], fill="black", width=1)
+            y_end = max([y_end0, y_end1, y_end2, y_end3])
+            #   vertical: x0 x3
+            in_draw.line([(x0[0], y_end), (x3[1], y_end)], fill="black", width=1)
+            #   horizontal x0
+            in_draw.line([(x0[0], y_start), (x0[0], y_end)], fill="black", width=1)
+            #   horizontal x1
+            in_draw.line([(x1[0], y_start), (x1[0], y_end)], fill="black", width=1)
+            #   horizontal x2
+            in_draw.line([(x2[0], y_start), (x2[0], y_end)], fill="black", width=1)
+            #   horizontal x3
+            in_draw.line([(x3[0], y_start), (x3[0], y_end)], fill="black", width=1)
+            #   horizontal last one
+            in_draw.line([(x3[1], y_start), (x3[1], y_end)], fill="black", width=1)
 
         return y_end
 
@@ -709,6 +763,7 @@ def put_text_to_image(npc):
                 padding = get_padx_center(text, in_font, x_start + j*cell_width, x_start + (j+1)*cell_width)
                 in_draw.text((x_start + padding + j*cell_width, y_start + pad_y), text, fill=(0, 0, 0, 255), font=in_font, align="left")
 
+        y_middle = 0
         # "Wounds", "MoveSpeed", "Fate", "Resilience"
         start = x_end + 20
         y_end = gl_h_lines[0]
@@ -724,6 +779,32 @@ def put_text_to_image(npc):
             in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
             #padding = get_padx_center(name, fonts, x_start, x_end)
             in_draw.text((x_start + 3*pad_x, y_start + pad_y), name, fill=(0, 0, 0, 255), font=in_font1, align="left")
+            # value
+            x_start = x_end
+            x_end = x_end + cell_width
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], outline="black")
+            text = str(in_npc.attributes[name][2])  # total value
+            padding = get_padx_center(text, fontb, x_start, x_end)
+            in_draw.text((x_start + padding, y_start + pad_y), text, fill=(0, 0, 0, 255), font=in_font2, align="left")
+            # line
+            x_start = start
+            x_end = x_start + 75 + cell_width
+            in_draw.line([(x_start, y_end), (x_end, y_end)], fill="black", width=1)
+            if i == 1: y_middle = y_end
+
+        # "Fortune", "Resolve"
+        start = x_end
+        y_end = y_middle
+        names = ["Fortune", "Resolve"]
+        for i, name in enumerate(names):
+            in_font1 = ImageFont.truetype('arial.ttf', 12); in_font2 = ImageFont.truetype('arial.ttf', 13); h = text_height
+            # header
+            x_start = start
+            x_end = x_start + 75
+            y_start = y_end
+            y_end = y_start + (pad_y + h + pad_y)
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+            in_draw.text((x_start + 3 * pad_x, y_start + pad_y), name, fill=(0, 0, 0, 255), font=in_font1, align="left")
             # value
             x_start = x_end
             x_end = x_end + cell_width
@@ -856,7 +937,7 @@ def put_text_to_image(npc):
 
         return h_lines_y[1]
 
-    def finish(in_img, in_y_start):
+    def finish(in_npc, in_img, in_y_start):
         # add image to end character sheet
         sheet_end = Image.open('imgs\\sheet_end.png')
         x_start = 0
@@ -872,9 +953,13 @@ def put_text_to_image(npc):
         bottom = y_end
         out_img = in_img.crop((left, top, right, bottom))
         out_img.show()
-        out_img.save('npc.png', quality=100)
+
+        file_name = in_npc.career_main_name + "__" + in_npc.name + ".png"
+        file_name = file_name.replace(' ', '_')
+        out_img.save(file_name, quality=100)
         #out_img_pdf = out_img.convert('RGB')
         #out_img_pdf.save(r'test.pdf')
+        return file_name
 
     y_end1 = draw_name_career_image(npc, draw, img)
     y_end2 = draw_descriptions(npc, draw)
@@ -884,7 +969,8 @@ def put_text_to_image(npc):
     x_end5, y_end5 = draw_basic_skill_table(npc, draw, y_end4)
     y_end6 = draw_advanced_skill_table(npc, draw, x_end5, y_end4)
 
-    finish(img, max([y_end1, y_end2, y_end3, y_end4, y_end5, y_end6]))
+    file_name = finish(npc, img, max([y_end1, y_end2, y_end3, y_end4, y_end5, y_end6]))
+    return file_name
 
 
 """
