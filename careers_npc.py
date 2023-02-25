@@ -231,7 +231,7 @@ class CareerWizard:
                         "Silver 3",
                         ['AG'],
                         ['Charm', 'Cool', 'Gossip', 'Intimidate', 'Language (Battle)', 'Language (Any one)'],
-                        ['Arcane Magic (Any Arcane Lore)', 'Detect Artefact', 'Fast Hands', 'Sixth Sense'],
+                        ['Arcane Magic (Any one)', 'Detect Artefact', 'Fast Hands', 'Sixth Sense'],
                         "Magical License"),
             CareerClass("Master Wizard",
                         "Gold 1",
@@ -903,7 +903,7 @@ class CareerMystic:
                         "Brass 4",
                         ['INT'],
                         ['Lore (Prophecy)', 'Channelling (Azyr)'],
-                        ['Arcane Magic (Celestial)', 'Magical Sense', 'Menacing', 'Strong-minded'],
+                        ['Arcane Magic (Heavens)', 'Magical Sense', 'Menacing', 'Strong-minded'],
                         "Trade Tools (Astrology)")
         ]
 
@@ -1671,7 +1671,7 @@ class CareerWitch:
                         "Brass 2",
                         ['I'],
                         ['Charm Animal', 'Dodge', 'Intuition', 'Melee (Polearm)', 'Perception', 'Trade (Herbalist)'],
-                        ['Arcane Magic (Witchery)', 'Attractive', 'Sixth Sense', 'Witch!'],
+                        ['Arcane Magic (Witchcraft)', 'Attractive', 'Sixth Sense', 'Witch!'],
                         "Quarterstaff, Sack, Selection of Herbs, Trade Tools (Herbalist)"),
             CareerClass("Wyrd",
                         "Brass 3",

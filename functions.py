@@ -34,7 +34,7 @@ def user_interface():
         out_class = random_pick(list_classes)
         list_careers = list(set(careers_by_class[out_class]) & set(careers_by_species[out_species]))
         out_career = random_pick(list_careers)
-        out_xp = random.randint(500, 20000) + 75
+        out_xp = random.randint(1000, 30000) + 75
     else:
         # USER INPUTS
         # ---SEX
@@ -126,20 +126,30 @@ def user_interface():
     logger.debug('\t- Check values...')
     npc.check_npc_1()
     logger.debug('\t- Advance in career levels (1-4)...')
-    npc.advance_by_xp()
+    reason = npc.advance_by_xp()
 
-    if npc.career_level == 3:
+    if reason == 'Reached highest career level: 4/4':
         logger.debug('\t- Continue advancing at career level 4...')
         npc.advance_continue(npc.xp_left)
 
     logger.debug('\t- Final modifications...')
     npc.final_modifications()
 
-    logger.debug('\t- Generate image...')
+    logger.debug('\t- Generate character sheet...')
     file_name = put_text_to_image(npc)
+    logger.debug(f'\t\tfile: {file_name} saved in local directory.')
 
-    logger.debug(f'\nDone! File: {file_name} saved in local directory.')
-    logger.debug(f'Experience points left = {npc.xp_left}')
+    if len(npc.spells) > 0:
+        logger.debug('\t- Generate spell sheet...')
+        file_name = generate_image_for_spells(npc)
+        logger.debug(f'\t\tfile: {file_name} saved in local directory.')
+
+    if npc.god is not None:
+        logger.debug('\t- Generate prayers sheet...')
+        file_name = generate_image_for_prayers(npc)
+        logger.debug(f'\t\tfile: {file_name} saved in local directory.')
+
+    logger.debug(f'\nDone! Experience points left = {npc.xp_left}')
 
 ############################################################################
 # ROLLS
@@ -166,6 +176,7 @@ def random_pick(in_list):
 ############################################################################
 # WEB
 def get_text(in_request, in_npc):
+    pre_desc = f'get_text: '
     out_text = None
 
     if in_request == 'traits':
@@ -190,9 +201,24 @@ def get_text(in_request, in_npc):
         data = {
             'contentVar': 'myDiv',
         }
-        r = requests.post('https://www.rangen.co.uk/chars/traitScript.php', headers=headers, data=data)
-        soup = BeautifulSoup(r.text, "lxml")
-        out_text = soup.text
+        url = 'https://www.rangen.co.uk/chars/traitScript.php'
+        try:
+            r = requests.post(url, headers=headers, data=data, timeout=5)
+        except requests.Timeout:
+            error = f'{pre_desc}Timeout when trying to fetch data from url.'
+            logger.error(error)
+            return None
+        except requests.ConnectionError:
+            error = f'{pre_desc}ConnectionError when trying to fetch data from url.'
+            logger.error(error)
+            return None
+        except Exception as e:
+            error = f'{pre_desc}Unknown exception: {e}'
+            logger.error(error)
+            return None
+        else:
+            soup = BeautifulSoup(r.text, "lxml")
+            out_text = soup.text
 
     elif in_request == 'appearance':
         headers = {
@@ -228,9 +254,24 @@ def get_text(in_request, in_npc):
             'tattoo': 'RandomTattoos',
             'makeup': 'RandomMakeup',
         }
-        r = requests.post('https://www.rangen.co.uk/chars/appScript.php', headers=headers, data=data)
-        soup = BeautifulSoup(r.text, "lxml")
-        out_text = soup.text
+        url = 'https://www.rangen.co.uk/chars/appScript.php'
+        try:
+            r = requests.post(url, headers=headers, data=data, timeout=5)
+        except requests.Timeout:
+            error = f'{pre_desc}Timeout when trying to fetch data from url.'
+            logger.error(error)
+            return None
+        except requests.ConnectionError:
+            error = f'{pre_desc}ConnectionError when trying to fetch data from url.'
+            logger.error(error)
+            return None
+        except Exception as e:
+            error = f'{pre_desc}Unknown exception: {e}'
+            logger.error(error)
+            return None
+        else:
+            soup = BeautifulSoup(r.text, "lxml")
+            out_text = soup.text
 
     return out_text
 
@@ -271,6 +312,8 @@ def get_traits(in_npc):
     """
     # text
     in_text = get_text('traits', in_npc)
+    if in_text is None:
+        return None, None, None
     # general look
     out_general_look = in_text[38: in_text.find('They:')]
     out_general_look, person = adjust_text(out_general_look, in_npc.sex)
@@ -311,6 +354,8 @@ def get_appearance(in_npc):
     """
     # text
     in_text = get_text('appearance', in_npc)
+    if in_text is None:
+        return None
     # appearance
     tmp_text = in_text[4:in_text.find('2 -')]
     tmp_text, person = adjust_text(tmp_text, in_npc.sex)
@@ -952,7 +997,7 @@ def put_text_to_image(npc):
         right = x_end
         bottom = y_end
         out_img = in_img.crop((left, top, right, bottom))
-        out_img.show()
+        #out_img.show()
 
         file_name = in_npc.career_main_name + "__" + in_npc.name + ".png"
         file_name = file_name.replace(' ', '_')
@@ -972,6 +1017,798 @@ def put_text_to_image(npc):
     file_name = finish(npc, img, max([y_end1, y_end2, y_end3, y_end4, y_end5, y_end6]))
     return file_name
 
+
+def generate_image_for_spells(npc):
+    gray_color = (142, 144, 153, 255)       # (120, 123, 131, 255)
+    img = Image.open('imgs/Spells_Sheet.png')
+    draw = ImageDraw.Draw(img)
+    gl_v_lines = [66, 262, 730, 750, 990, 1251, 1316]
+    gl_h_lines = [64, 420]
+
+    def get_text_dimensions(text_string, font):
+        ascent, descent = font.getmetrics()
+        text_width = font.getmask(text_string).getbbox()[2]
+        text_height = font.getmask(text_string).getbbox()[3] + descent
+        return text_width, text_height
+
+    def get_padx_center(in_text, in_font, x_left, x_right):
+        w, h = get_text_dimensions(in_text, in_font)
+        return (x_right - x_left - w) // 2
+
+    def format_long_text(in_text, in_font, max_w=440):
+        #max_w = 440
+
+        w, h = get_text_dimensions(in_text, in_font)
+        if w > max_w:
+            words_splits = in_text.split(' ')
+            out_splits = []
+            tmp_text = words_splits[0]
+            # merge words until limit, then add to: out_splits
+            for i in range(1, len(words_splits)):
+                if get_text_dimensions(tmp_text + ' ' + words_splits[i], in_font)[0] <= max_w:
+                    tmp_text = tmp_text + ' ' + words_splits[i]
+                else:
+                    out_splits.append(tmp_text)
+                    tmp_text = words_splits[i]
+                # last one
+                if i == len(words_splits) - 1 and len(tmp_text) > 0:
+                    out_splits.append(tmp_text)
+
+            return '\n'.join(out_splits)
+        else:
+            return in_text
+
+    def draw_name_career(in_npc, in_draw):
+        font = ImageFont.truetype('arial.ttf', 12)
+        text_height = get_text_dimensions('Test', font)[1]
+        fontb = ImageFont.truetype('arialbd.ttf', 14)
+        textb_height = get_text_dimensions('Test', fontb)[1]
+        pad_y = 3
+        x_start = gl_v_lines[0]
+        x_end = gl_v_lines[1]
+        y_start = gl_h_lines[0]
+        y_end = y_start + textb_height + pad_y
+
+        # name
+        text = in_npc.name
+        in_draw.text((x_start + get_padx_center(text, fontb, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=fontb, align="center")
+        # career current
+        y_start = y_end + 3
+        y_end = y_start + text_height + pad_y
+        text = f'Career (lvl {in_npc.career_level+1}): {in_npc.career_current.name}'
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+        # career main
+        y_start = y_end
+        y_end = y_start + text_height + pad_y
+        text = f'Career path: {in_npc.career_main_name}'
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+        # class
+        y_start = y_end
+        y_end = y_start + text_height + pad_y
+        text = f'Class: {in_npc.ch_class}'
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+        # species, age
+        y_start = y_end
+        y_end = y_start + text_height + pad_y
+        text = f'Species: {in_npc.species}, Age: {in_npc.age}'
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+        # height, status
+        y_start = y_end
+        y_end = y_start + text_height + pad_y
+        text = f'Height: {in_npc.height:.2f}m, Status: {in_npc.status}'
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+
+        return x_end, y_end
+    def draw_lore_symbol(in_npc, in_draw, in_img, in_x_start):
+        font = ImageFont.truetype('arialbd.ttf', 13)
+        text_height = get_text_dimensions('Test', font)[1]
+        pad_x = 3
+        pad_y = 3
+        max_width = 110
+        x_end = in_x_start  # init return value
+        y_end = 0           # init return value
+
+        if in_npc.arcane is not None:
+            # symbol
+            img_path = 'imgs\\lore_' + in_npc.arcane.lower() + '.png'
+            symbol_img = Image.open(img_path)
+            symbol_img = symbol_img.resize((int(symbol_img.size[0]*0.4), int(symbol_img.size[1]*0.4)))
+            x_start = in_x_start + 10
+            y_start = gl_h_lines[0]
+            y_end = y_start + symbol_img.size[1]
+            padding_x = (max_width - symbol_img.size[0]) // 2
+            in_img.paste(symbol_img, (x_start + padding_x, y_start), symbol_img)
+
+            # lore name
+            x_end = x_start + max_width
+            text = 'The Lore of'
+            y_start = y_end + 2
+            y_end = y_start + text_height + pad_y
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+
+            text = in_npc.arcane
+            y_start = y_end
+            y_end = y_start + text_height + pad_y
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+
+        return x_end, y_end
+    def draw_skill_table(in_npc, in_draw, in_x_start):
+        def shorten_text(in_text, in_font):
+            w, h = get_text_dimensions(in_text, in_font)
+            mod = False
+            while w > 90:
+                in_text = in_text[:-2]
+                w, h = get_text_dimensions(in_text, in_font)
+                mod = True
+            if mod:
+                return in_text + '.'
+            else:
+                return in_text
+        # -----------------------------------------------------
+        # ----------- BASIC
+        # HEADER
+        size = (in_x_start+20, gl_h_lines[0], 227, 20)   # x,y,with,height
+        in_draw.rectangle([(size[0], size[1]), (size[0]+size[2], size[1]+size[3])], fill=gray_color, outline="black")
+        #   v_lines
+        v_lines_x = [size[0], size[0]+103, size[0]+134, size[0]+165, size[0]+196, size[0]+size[2]]
+        in_draw.line([(v_lines_x[1], size[1]), (v_lines_x[1], size[1]+size[3])], fill="black", width=0)
+        in_draw.line([(v_lines_x[3], size[1]), (v_lines_x[3], size[1]+size[3])], fill="black", width=0)
+        in_draw.line([(v_lines_x[4], size[1]), (v_lines_x[4], size[1]+size[3])], fill="black", width=0)
+        #   insert text
+        padx, pady = 4, 3
+        text_pos = [(v_lines_x[0]+padx, size[1]+pady),  # list of (x,y)
+                    (v_lines_x[1]+padx, size[1]+pady),
+                    (v_lines_x[3]+padx, size[1]+pady),
+                    (v_lines_x[4]+padx, size[1]+pady)]
+        for text, pos in zip(['Skill', '     Stat.', 'Adv.', 'Tot.'], text_pos):
+            in_draw.text((pos[0], pos[1]), text, fill=(0, 0, 0, 255), font=ImageFont.truetype('arial.ttf', 12), align="center")
+        # SKILLS
+        skills_group = {'Melee': in_npc.skills_basic['Melee']}
+        if 'Language (Magick)' in in_npc.skills_advanced.keys():
+            skills_group.update({'Language (Magick)': in_npc.skills_advanced['Language (Magick)']})
+        if 'Channelling' in in_npc.skills_advanced.keys():
+            skills_group.update({'Channelling': in_npc.skills_advanced['Channelling']})
+        font = ImageFont.truetype('arial.ttf', 12)
+        fontb = ImageFont.truetype('arialbd.ttf', 13)
+        padx, pady = 4, 3
+        # top and bottom horizontal line's y-value
+        h_lines_y = [size[1]+size[3], size[1]+size[3]+pady+get_text_dimensions('Test', font)[1]+pady]
+        for skill_name, values_list in skills_group.items():
+            # name
+            skill_name = shorten_text(skill_name, font)
+            # positions
+            text_pos = [(v_lines_x[0]+padx, h_lines_y[0]+pady),     # name: x,y
+                        (v_lines_x[1]+get_padx_center(str(values_list[0]), font, v_lines_x[1], v_lines_x[2]),  h_lines_y[0]+pady),  # stat: x,y
+                        (v_lines_x[2]+get_padx_center(str(values_list[1]), font, v_lines_x[2], v_lines_x[3]),  h_lines_y[0]+pady),  # stat: x,y
+                        (v_lines_x[3]+get_padx_center(str(values_list[2]), font, v_lines_x[3], v_lines_x[4]),  h_lines_y[0]+pady),  # stat: x,y
+                        (v_lines_x[4]+get_padx_center(str(values_list[3]), fontb,v_lines_x[4], v_lines_x[5]),  h_lines_y[0]+pady-1)]  # stat: x,y
+            # draw text
+            in_draw.text(text_pos[0], skill_name, fill=(0, 0, 0, 255), font=font, align="center")
+            in_draw.text(text_pos[1], str(values_list[0]), fill=(0, 0, 0, 255), font=font, align="center")
+            in_draw.text(text_pos[2], str(values_list[1]), fill=(0, 0, 0, 255), font=font, align="center")
+            in_draw.text(text_pos[3], str(values_list[2]), fill=(0, 0, 0, 255), font=font, align="center")
+            in_draw.text(text_pos[4], str(values_list[3]), fill=(0, 0, 0, 255), font=fontb, align="center")
+            # draw vertical lines
+            in_draw.line([(v_lines_x[1], h_lines_y[0]), (v_lines_x[1], h_lines_y[1])], fill="black", width=0)
+            in_draw.line([(v_lines_x[2], h_lines_y[0]), (v_lines_x[2], h_lines_y[1])], fill="black", width=0)
+            in_draw.line([(v_lines_x[3], h_lines_y[0]), (v_lines_x[3], h_lines_y[1])], fill="black", width=0)
+            in_draw.line([(v_lines_x[4], h_lines_y[0]), (v_lines_x[4], h_lines_y[1])], fill="black", width=0)
+            in_draw.line([(v_lines_x[5], h_lines_y[0]), (v_lines_x[5], h_lines_y[1])], fill="black", width=0)
+            # draw horizontal bottom line
+            in_draw.line([(v_lines_x[0], h_lines_y[1]), (v_lines_x[-1], h_lines_y[1])], fill="black", width=0)
+            h_lines_y = [h_lines_y[1], h_lines_y[1]+h_lines_y[1]-h_lines_y[0]]
+
+        return size[0]+size[2], h_lines_y[1]
+    def draw_stats(in_npc, in_draw, in_x_start):
+        # "WS", "BS", "S", "T", "AG", "I", "DEX", "INT", "WP", "FEL"
+        cell_width = 26
+        fonts = ImageFont.truetype('arialbd.ttf', 11)
+        font = ImageFont.truetype('arial.ttf', 12)
+        fontb = ImageFont.truetype('arialbd.ttf', 13)
+        texts_height = get_text_dimensions('Test', fonts)[1]
+        text_height = get_text_dimensions('Test', font)[1]
+        textb_height = get_text_dimensions('Test', fontb)[1]
+        pad_x = 2
+        pad_y = 3
+
+        # HEADER
+        x_start = in_x_start + 20
+        x_end = x_start + cell_width*10
+        y_start = gl_h_lines[0]
+        y_end = y_start + (pad_y + texts_height + pad_y)
+        in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+        for dx in range(cell_width, cell_width*10-1, cell_width):
+            in_draw.line([(x_start+dx, y_start), (x_start+dx, y_end)], fill="black", width=1)
+        stat_names = ["WS", "BS", "S", "T", "AG", "I", "DEX", "INT", "WP", "FEL"]
+        for i, text in enumerate(stat_names):
+            padding = get_padx_center(text, fonts, x_start + i*cell_width, x_start + (i+1)*cell_width)
+            in_draw.text((x_start + padding + i*cell_width, y_start + pad_y), text, fill=(0, 0, 0, 255), font=fonts, align="left")
+
+        # STAT VALUES
+        # self.attributes  {stat_name: [basic, advance, total]}
+        for i in range(3):
+            if i in [0, 1]: in_font = font; in_text_height = text_height
+            else: in_font = fontb; in_text_height = textb_height
+
+            y_start = y_end
+            y_end = y_start + (pad_y + in_text_height + pad_y)
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], outline="black")
+            for dx in range(cell_width, cell_width*10-1, cell_width):
+                in_draw.line([(x_start+dx, y_start), (x_start+dx, y_end)], fill="black", width=1)
+
+            values = [str(in_npc.attributes[stat_name][i]) for stat_name in stat_names]
+            for j, text in enumerate(values):
+                padding = get_padx_center(text, in_font, x_start + j*cell_width, x_start + (j+1)*cell_width)
+                in_draw.text((x_start + padding + j*cell_width, y_start + pad_y), text, fill=(0, 0, 0, 255), font=in_font, align="left")
+
+        return x_end, y_end
+    def draw_spells(in_npc, in_draw, in_y_start):
+        def shorten_text(in_text, in_font, max_w=95):
+            w, h = get_text_dimensions(in_text, in_font)
+            mod = False
+            while w > max_w:
+                in_text = in_text[:-2]
+                w, h = get_text_dimensions(in_text, in_font)
+                mod = True
+            if mod:
+                return in_text + '.'
+            else:
+                return in_text
+        """
+        class SpellClass:
+        def __init__(self, cn, _range, target, duration, description):
+            self.cn = cn    # str
+            self._range = _range   # str
+            self.target = target  # str
+            self.duration = duration  # str
+            self.description = description  # str
+        """
+        font = ImageFont.truetype('arial.ttf', 12)
+        text_height = get_text_dimensions('Test', font)[1]
+        pad_x = 3
+        pad_y = 3
+
+        x_end = gl_v_lines[5]     # set only for return
+        y_end = in_y_start          # set for initial value
+
+        # get max widths of Header columns
+        max_widths = [150, 30, 80, 90, 90]
+        max_widths.append(gl_v_lines[5] - gl_v_lines[0] - sum(max_widths))
+        """
+        max_widths = [0]*6
+        for spell_type in in_npc.spells.keys():
+            # 'Spell'
+            val = max([get_text_dimensions(val_str, font)[0] for val_str in list(in_npc.spells[spell_type].keys())+[spell_type.upper() + ' spells']]) + 10
+            if val > max_widths[0]: max_widths[0] = val
+            # 'CN'
+            max_widths[1] = 30
+            # 'Range'
+            val = max([get_text_dimensions(str(obj._range), font)[0] for obj in in_npc.spells[spell_type].values()]) + 10
+            if val > max_widths[2]: max_widths[2] = val
+            # 'Target'
+            val = max([get_text_dimensions(str(obj.target), font)[0] for obj in in_npc.spells[spell_type].values()]) + 10
+            if val > max_widths[3]: max_widths[3] = val
+            # 'Duration'
+            val = max([get_text_dimensions(str(obj.duration), font)[0] for obj in in_npc.spells[spell_type].values()]) + 10
+            if val > max_widths[4]: max_widths[4] = val
+            # 'Description'
+            max_widths[5] = gl_v_lines[5] - gl_v_lines[0] - sum(max_widths)
+        """
+
+        for spell_type in in_npc.spells.keys():
+            # HEADER
+            #   rectangle
+            text = spell_type.upper() + ' spells'
+            x_start = gl_v_lines[0]
+            x_end = x_start + max_widths[0]
+            x0 = [x_start, x_end]
+            y_start = y_end + 20
+            y_end = y_start + (pad_y + text_height + pad_y)
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+            #   rectangle
+            text = 'CN'
+            x_start = x_end
+            x_end = x_start + max_widths[1]
+            x1 = [x_start, x_end]
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+            #   rectangle
+            text = 'Range'
+            x_start = x_end
+            x_end = x_start + max_widths[2]
+            x2 = [x_start, x_end]
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+            #   rectangle
+            text = 'Target'
+            x_start = x_end
+            x_end = x_start + max_widths[3]
+            x3 = [x_start, x_end]
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+            #   rectangle
+            text = 'Duration'
+            x_start = x_end
+            x_end = x_start + max_widths[4]
+            x4 = [x_start, x_end]
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+            #   rectangle
+            text = 'Description'
+            x_start = x_end
+            x_end = gl_v_lines[5]
+            x5 = [x_start, x_end]
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+            # DESCRIPTIONS
+            for spell_name, spell_obj in in_npc.spells[spell_type].items():
+                # Spell name
+                text = format_long_text(spell_name, font, max_w=max_widths[0]-5)
+                x_start, x_end = x0
+                y_start = y_end
+                #in_draw.text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+                y_end0 = y_start + (pad_y + text_height) * (1 + text.count('\n'))
+                in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+                # Spell CN
+                text = str(spell_obj.cn)
+                x_start, x_end = x1
+                y_end1 = y_start + (pad_y + text_height) * (1+text.count('\n'))
+                in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+                # Spell Range
+                #text = str(spell_obj._range)
+                text = format_long_text(spell_obj._range, font, max_w=max_widths[2]-5)
+                x_start, x_end = x2
+                y_end2 = y_start + (pad_y + text_height) * (1+text.count('\n'))
+                #in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+                in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+                # Spell Target
+                #text = str(spell_obj.target)
+                text = format_long_text(spell_obj.target, font, max_w=max_widths[3]-5)
+                x_start, x_end = x3
+                y_end3 = y_start + (pad_y + text_height) * (1+text.count('\n'))
+                #in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+                in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+                # Spell Duration
+                #text = str(spell_obj.duration)
+                text = format_long_text(spell_obj.duration, font, max_w=max_widths[4]-5)
+                x_start, x_end = x4
+                y_end4 = y_start + (pad_y + text_height) * (1+text.count('\n'))
+                #in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+                in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+                # Description
+                text = format_long_text(spell_obj.description, font, max_w=max_widths[5]-5)
+                x_start, x_end = x5
+                y_end5 = y_start + (pad_y + text_height) * (1+text.count('\n'))
+                in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+                # lines
+                y_end = max([y_end0, y_end1, y_end2, y_end3, y_end4, y_end5])
+                #   vertical: x0 x5
+                in_draw.line([(x0[0], y_end), (x5[1], y_end)], fill="black", width=1)
+                #   horizontal x0
+                in_draw.line([(x0[0], y_start), (x0[0], y_end)], fill="black", width=1)
+                #   horizontal x1
+                in_draw.line([(x1[0], y_start), (x1[0], y_end)], fill="black", width=1)
+                #   horizontal x2
+                in_draw.line([(x2[0], y_start), (x2[0], y_end)], fill="black", width=1)
+                #   horizontal x3
+                in_draw.line([(x3[0], y_start), (x3[0], y_end)], fill="black", width=1)
+                #   horizontal x4
+                in_draw.line([(x4[0], y_start), (x4[0], y_end)], fill="black", width=1)
+                #   horizontal x5
+                in_draw.line([(x5[0], y_start), (x5[0], y_end)], fill="black", width=1)
+                #   horizontal last one
+                in_draw.line([(x5[1], y_start), (x5[1], y_end)], fill="black", width=1)
+
+        return x_end, y_end
+    def finish(in_npc, in_img, in_y_start):
+        # add image to end character sheet
+        sheet_end = Image.open('imgs\\spells_sheet_end.png')
+        x_start = 0
+        x_end = gl_v_lines[-1]
+        y_start = in_y_start + 5
+        y_end = y_start + sheet_end.size[1]
+        in_img.paste(sheet_end, (x_start, y_start), sheet_end)
+
+        # crop and save image
+        left = 0
+        top = 0
+        right = x_end
+        bottom = y_end
+        out_img = in_img.crop((left, top, right, bottom))
+        #out_img.show()
+
+        file_name = in_npc.career_main_name + "__" + in_npc.name + "_spells.png"
+        file_name = file_name.replace(' ', '_')
+        out_img.save(file_name, quality=100)
+        #out_img_pdf = out_img.convert('RGB')
+        #out_img_pdf.save(r'test.pdf')
+        return file_name
+
+    end_x1, end_y1 = draw_name_career(npc, draw)
+    end_x2, end_y2 = draw_lore_symbol(npc, draw, img, end_x1)
+    end_x3, end_y3 = draw_skill_table(npc, draw, end_x2)
+    end_x4, end_y4 = draw_stats(npc, draw, end_x3)
+    end_x5, end_y5 = draw_spells(npc, draw, max([end_y1, end_y2, end_y3, end_y4]))
+
+    file_name = finish(npc, img, max([end_y1, end_y2, end_y3, end_y4, end_y5]))
+
+    return file_name
+
+
+def generate_image_for_prayers(npc):
+    gray_color = (142, 144, 153, 255)       # (120, 123, 131, 255)
+    img = Image.open('imgs/Spells_Sheet.png')
+    draw = ImageDraw.Draw(img)
+    gl_v_lines = [66, 262, 730, 750, 990, 1251, 1316]
+    gl_h_lines = [64, 420]
+
+    def get_text_dimensions(text_string, font):
+        ascent, descent = font.getmetrics()
+        text_width = font.getmask(text_string).getbbox()[2]
+        text_height = font.getmask(text_string).getbbox()[3] + descent
+        return text_width, text_height
+
+    def get_padx_center(in_text, in_font, x_left, x_right):
+        w, h = get_text_dimensions(in_text, in_font)
+        return (x_right - x_left - w) // 2
+
+    def format_long_text(in_text, in_font, max_w=440):
+        #max_w = 440
+
+        w, h = get_text_dimensions(in_text, in_font)
+        if w > max_w:
+            words_splits = in_text.split(' ')
+            out_splits = []
+            tmp_text = words_splits[0]
+            # merge words until limit, then add to: out_splits
+            for i in range(1, len(words_splits)):
+                if get_text_dimensions(tmp_text + ' ' + words_splits[i], in_font)[0] <= max_w:
+                    tmp_text = tmp_text + ' ' + words_splits[i]
+                else:
+                    out_splits.append(tmp_text)
+                    tmp_text = words_splits[i]
+                # last one
+                if i == len(words_splits) - 1 and len(tmp_text) > 0:
+                    out_splits.append(tmp_text)
+
+            return '\n'.join(out_splits)
+        else:
+            return in_text
+
+    def draw_name_career(in_npc, in_draw):
+        font = ImageFont.truetype('arial.ttf', 12)
+        text_height = get_text_dimensions('Test', font)[1]
+        fontb = ImageFont.truetype('arialbd.ttf', 14)
+        textb_height = get_text_dimensions('Test', fontb)[1]
+        pad_y = 3
+        x_start = gl_v_lines[0]
+        x_end = gl_v_lines[1]
+        y_start = gl_h_lines[0]
+        y_end = y_start + textb_height + pad_y
+
+        # name
+        text = in_npc.name
+        in_draw.text((x_start + get_padx_center(text, fontb, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=fontb, align="center")
+        # career current
+        y_start = y_end + 3
+        y_end = y_start + text_height + pad_y
+        text = f'Career (lvl {in_npc.career_level+1}): {in_npc.career_current.name}'
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+        # career main
+        y_start = y_end
+        y_end = y_start + text_height + pad_y
+        text = f'Career path: {in_npc.career_main_name}'
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+        # class
+        y_start = y_end
+        y_end = y_start + text_height + pad_y
+        text = f'Class: {in_npc.ch_class}'
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+        # species, age
+        y_start = y_end
+        y_end = y_start + text_height + pad_y
+        text = f'Species: {in_npc.species}, Age: {in_npc.age}'
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+        # height, status
+        y_start = y_end
+        y_end = y_start + text_height + pad_y
+        text = f'Height: {in_npc.height:.2f}m, Status: {in_npc.status}'
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+
+        return x_end, y_end
+    def draw_religion_symbol(in_npc, in_draw, in_img, in_x_start):
+        font = ImageFont.truetype('arialbd.ttf', 13)
+        text_height = get_text_dimensions('Test', font)[1]
+        pad_x = 3
+        pad_y = 3
+        max_width = 110
+        x_end = in_x_start  # init return value
+        y_end = 0           # init return value
+
+        # symbol
+        img_path = 'imgs\\religion_' + in_npc.god + '.png'
+        symbol_img = Image.open(img_path)
+        symbol_img = symbol_img.resize((int(symbol_img.size[0]*0.4), int(symbol_img.size[1]*0.4)))
+        x_start = in_x_start + 10
+        y_start = gl_h_lines[0]
+        y_end = y_start + symbol_img.size[1]
+        padding_x = (max_width - symbol_img.size[0]) // 2
+        in_img.paste(symbol_img, (x_start + padding_x, y_start), symbol_img)
+
+        # lore name
+        x_end = x_start + max_width
+        text = in_npc.god.upper()
+        y_start = y_end + 2
+        y_end = y_start + text_height + pad_y
+        in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start), text, fill=(0, 0, 0, 255), font=font, align="center")
+
+        return x_end, y_end
+    def draw_skill_table(in_npc, in_draw, in_x_start):
+        def shorten_text(in_text, in_font):
+            w, h = get_text_dimensions(in_text, in_font)
+            mod = False
+            while w > 90:
+                in_text = in_text[:-2]
+                w, h = get_text_dimensions(in_text, in_font)
+                mod = True
+            if mod:
+                return in_text + '.'
+            else:
+                return in_text
+        # -----------------------------------------------------
+        # ----------- BASIC
+        # HEADER
+        size = (in_x_start+20, gl_h_lines[0], 227, 20)   # x,y,with,height
+        in_draw.rectangle([(size[0], size[1]), (size[0]+size[2], size[1]+size[3])], fill=gray_color, outline="black")
+        #   v_lines
+        v_lines_x = [size[0], size[0]+103, size[0]+134, size[0]+165, size[0]+196, size[0]+size[2]]
+        in_draw.line([(v_lines_x[1], size[1]), (v_lines_x[1], size[1]+size[3])], fill="black", width=0)
+        in_draw.line([(v_lines_x[3], size[1]), (v_lines_x[3], size[1]+size[3])], fill="black", width=0)
+        in_draw.line([(v_lines_x[4], size[1]), (v_lines_x[4], size[1]+size[3])], fill="black", width=0)
+        #   insert text
+        padx, pady = 4, 3
+        text_pos = [(v_lines_x[0]+padx, size[1]+pady),  # list of (x,y)
+                    (v_lines_x[1]+padx, size[1]+pady),
+                    (v_lines_x[3]+padx, size[1]+pady),
+                    (v_lines_x[4]+padx, size[1]+pady)]
+        for text, pos in zip(['Skill', '     Stat.', 'Adv.', 'Tot.'], text_pos):
+            in_draw.text((pos[0], pos[1]), text, fill=(0, 0, 0, 255), font=ImageFont.truetype('arial.ttf', 12), align="center")
+        # SKILLS
+        skills_group = {'Pray': in_npc.skills_advanced['Pray']}
+        font = ImageFont.truetype('arial.ttf', 12)
+        fontb = ImageFont.truetype('arialbd.ttf', 13)
+        padx, pady = 4, 3
+        # top and bottom horizontal line's y-value
+        h_lines_y = [size[1]+size[3], size[1]+size[3]+pady+get_text_dimensions('Test', font)[1]+pady]
+        for skill_name, values_list in skills_group.items():
+            # name
+            skill_name = shorten_text(skill_name, font)
+            # positions
+            text_pos = [(v_lines_x[0]+padx, h_lines_y[0]+pady),     # name: x,y
+                        (v_lines_x[1]+get_padx_center(str(values_list[0]), font, v_lines_x[1], v_lines_x[2]),  h_lines_y[0]+pady),  # stat: x,y
+                        (v_lines_x[2]+get_padx_center(str(values_list[1]), font, v_lines_x[2], v_lines_x[3]),  h_lines_y[0]+pady),  # stat: x,y
+                        (v_lines_x[3]+get_padx_center(str(values_list[2]), font, v_lines_x[3], v_lines_x[4]),  h_lines_y[0]+pady),  # stat: x,y
+                        (v_lines_x[4]+get_padx_center(str(values_list[3]), fontb,v_lines_x[4], v_lines_x[5]),  h_lines_y[0]+pady-1)]  # stat: x,y
+            # draw text
+            in_draw.text(text_pos[0], skill_name, fill=(0, 0, 0, 255), font=font, align="center")
+            in_draw.text(text_pos[1], str(values_list[0]), fill=(0, 0, 0, 255), font=font, align="center")
+            in_draw.text(text_pos[2], str(values_list[1]), fill=(0, 0, 0, 255), font=font, align="center")
+            in_draw.text(text_pos[3], str(values_list[2]), fill=(0, 0, 0, 255), font=font, align="center")
+            in_draw.text(text_pos[4], str(values_list[3]), fill=(0, 0, 0, 255), font=fontb, align="center")
+            # draw vertical lines
+            in_draw.line([(v_lines_x[1], h_lines_y[0]), (v_lines_x[1], h_lines_y[1])], fill="black", width=0)
+            in_draw.line([(v_lines_x[2], h_lines_y[0]), (v_lines_x[2], h_lines_y[1])], fill="black", width=0)
+            in_draw.line([(v_lines_x[3], h_lines_y[0]), (v_lines_x[3], h_lines_y[1])], fill="black", width=0)
+            in_draw.line([(v_lines_x[4], h_lines_y[0]), (v_lines_x[4], h_lines_y[1])], fill="black", width=0)
+            in_draw.line([(v_lines_x[5], h_lines_y[0]), (v_lines_x[5], h_lines_y[1])], fill="black", width=0)
+            # draw horizontal bottom line
+            in_draw.line([(v_lines_x[0], h_lines_y[1]), (v_lines_x[-1], h_lines_y[1])], fill="black", width=0)
+            h_lines_y = [h_lines_y[1], h_lines_y[1]+h_lines_y[1]-h_lines_y[0]]
+
+        return size[0]+size[2], h_lines_y[1]
+    def draw_stats(in_npc, in_draw, in_x_start):
+        # "WS", "BS", "S", "T", "AG", "I", "DEX", "INT", "WP", "FEL"
+        cell_width = 26
+        fonts = ImageFont.truetype('arialbd.ttf', 11)
+        font = ImageFont.truetype('arial.ttf', 12)
+        fontb = ImageFont.truetype('arialbd.ttf', 13)
+        texts_height = get_text_dimensions('Test', fonts)[1]
+        text_height = get_text_dimensions('Test', font)[1]
+        textb_height = get_text_dimensions('Test', fontb)[1]
+        pad_x = 2
+        pad_y = 3
+
+        # HEADER
+        x_start = in_x_start + 20
+        x_end = x_start + cell_width*10
+        y_start = gl_h_lines[0]
+        y_end = y_start + (pad_y + texts_height + pad_y)
+        in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+        for dx in range(cell_width, cell_width*10-1, cell_width):
+            in_draw.line([(x_start+dx, y_start), (x_start+dx, y_end)], fill="black", width=1)
+        stat_names = ["WS", "BS", "S", "T", "AG", "I", "DEX", "INT", "WP", "FEL"]
+        for i, text in enumerate(stat_names):
+            padding = get_padx_center(text, fonts, x_start + i*cell_width, x_start + (i+1)*cell_width)
+            in_draw.text((x_start + padding + i*cell_width, y_start + pad_y), text, fill=(0, 0, 0, 255), font=fonts, align="left")
+
+        # STAT VALUES
+        # self.attributes  {stat_name: [basic, advance, total]}
+        for i in range(3):
+            if i in [0, 1]: in_font = font; in_text_height = text_height
+            else: in_font = fontb; in_text_height = textb_height
+
+            y_start = y_end
+            y_end = y_start + (pad_y + in_text_height + pad_y)
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], outline="black")
+            for dx in range(cell_width, cell_width*10-1, cell_width):
+                in_draw.line([(x_start+dx, y_start), (x_start+dx, y_end)], fill="black", width=1)
+
+            values = [str(in_npc.attributes[stat_name][i]) for stat_name in stat_names]
+            for j, text in enumerate(values):
+                padding = get_padx_center(text, in_font, x_start + j*cell_width, x_start + (j+1)*cell_width)
+                in_draw.text((x_start + padding + j*cell_width, y_start + pad_y), text, fill=(0, 0, 0, 255), font=in_font, align="left")
+
+        return x_end, y_end
+    def draw_prayers(in_npc, in_draw, in_y_start):
+        """
+        class PrayerClass:
+            def __init__(self, _range, target, duration, description):
+                self._range = _range   # str
+                self.target = target  # str
+                self.duration = duration  # str
+                self.description = description  # str
+        """
+        font = ImageFont.truetype('arial.ttf', 12)
+        text_height = get_text_dimensions('Test', font)[1]
+        pad_x = 3
+        pad_y = 3
+
+        x_end = gl_v_lines[5]     # set only for return
+        y_end = in_y_start          # set for initial value
+
+        # get max widths of Header columns
+        max_widths = [150, 80, 90, 90]
+        max_widths.append(gl_v_lines[5] - gl_v_lines[0] - sum(max_widths))
+
+        i = 0
+        for prayer_type in ['BLESSINGS', 'MIRACLES']:
+            # HEADER
+            #   rectangle
+            text = prayer_type
+            x_start = gl_v_lines[0]
+            x_end = x_start + max_widths[0]
+            x0 = [x_start, x_end]
+            y_start = y_end + 20
+            y_end = y_start + (pad_y + text_height + pad_y)
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+            #   rectangle
+            text = 'Range'
+            x_start = x_end
+            x_end = x_start + max_widths[1]
+            x2 = [x_start, x_end]
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+            #   rectangle
+            text = 'Target'
+            x_start = x_end
+            x_end = x_start + max_widths[2]
+            x3 = [x_start, x_end]
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+            #   rectangle
+            text = 'Duration'
+            x_start = x_end
+            x_end = x_start + max_widths[3]
+            x4 = [x_start, x_end]
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+            #   rectangle
+            text = 'Description'
+            x_start = x_end
+            x_end = gl_v_lines[5]
+            x5 = [x_start, x_end]
+            in_draw.rectangle([(x_start, y_start), (x_end, y_end)], fill=gray_color, outline="black")
+            in_draw.text((x_start + get_padx_center(text, font, x_start, x_end), y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+            if i == 0:
+                prayers_group = in_npc.blessings
+            else:
+                prayers_group = in_npc.miracles
+            i += 1
+
+            # DESCRIPTIONS
+            for prayer_name, prayer_obj in prayers_group.items():
+                # Name
+                text = format_long_text(prayer_name, font, max_w=max_widths[0]-5)
+                x_start, x_end = x0
+                y_start = y_end
+                y_end0 = y_start + (pad_y + text_height) * (1 + text.count('\n'))
+                in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+                # Range
+                text = format_long_text(prayer_obj._range, font, max_w=max_widths[1]-5)
+                x_start, x_end = x2
+                y_end2 = y_start + (pad_y + text_height) * (1+text.count('\n'))
+                in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+                # Target
+                text = format_long_text(prayer_obj.target, font, max_w=max_widths[2]-5)
+                x_start, x_end = x3
+                y_end3 = y_start + (pad_y + text_height) * (1+text.count('\n'))
+                in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+                # Duration
+                text = format_long_text(prayer_obj.duration, font, max_w=max_widths[3]-5)
+                x_start, x_end = x4
+                y_end4 = y_start + (pad_y + text_height) * (1+text.count('\n'))
+                in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+                # Description
+                text = format_long_text(prayer_obj.description, font, max_w=max_widths[4]-5)
+                x_start, x_end = x5
+                y_end5 = y_start + (pad_y + text_height) * (1+text.count('\n'))
+                in_draw.multiline_text((x_start + pad_x, y_start + pad_y), text, fill=(0, 0, 0, 255), font=font, align="left")
+
+                # lines
+                y_end = max([y_end0, y_end2, y_end3, y_end4, y_end5])
+                #   vertical: x0 x5
+                in_draw.line([(x0[0], y_end), (x5[1], y_end)], fill="black", width=1)
+                #   horizontal x0
+                in_draw.line([(x0[0], y_start), (x0[0], y_end)], fill="black", width=1)
+                #   horizontal x2
+                in_draw.line([(x2[0], y_start), (x2[0], y_end)], fill="black", width=1)
+                #   horizontal x3
+                in_draw.line([(x3[0], y_start), (x3[0], y_end)], fill="black", width=1)
+                #   horizontal x4
+                in_draw.line([(x4[0], y_start), (x4[0], y_end)], fill="black", width=1)
+                #   horizontal x5
+                in_draw.line([(x5[0], y_start), (x5[0], y_end)], fill="black", width=1)
+                #   horizontal last one
+                in_draw.line([(x5[1], y_start), (x5[1], y_end)], fill="black", width=1)
+
+        return x_end, y_end
+    def finish(in_npc, in_img, in_y_start):
+        # add image to end character sheet
+        sheet_end = Image.open('imgs\\spells_sheet_end.png')
+        x_start = 0
+        x_end = gl_v_lines[-1]
+        y_start = in_y_start + 5
+        y_end = y_start + sheet_end.size[1]
+        in_img.paste(sheet_end, (x_start, y_start), sheet_end)
+
+        # crop and save image
+        left = 0
+        top = 0
+        right = x_end
+        bottom = y_end
+        out_img = in_img.crop((left, top, right, bottom))
+        #out_img.show()
+
+        file_name = in_npc.career_main_name + "__" + in_npc.name + "_prayers.png"
+        file_name = file_name.replace(' ', '_')
+        out_img.save(file_name, quality=100)
+        #out_img_pdf = out_img.convert('RGB')
+        #out_img_pdf.save(r'test.pdf')
+        return file_name
+
+    end_x1, end_y1 = draw_name_career(npc, draw)
+    end_x2, end_y2 = draw_religion_symbol(npc, draw, img, end_x1)
+    end_x3, end_y3 = draw_skill_table(npc, draw, end_x2)
+    end_x4, end_y4 = draw_stats(npc, draw, end_x3)
+    end_x5, end_y5 = draw_prayers(npc, draw, max([end_y1, end_y2, end_y3, end_y4]))
+
+    file_name = finish(npc, img, max([end_y1, end_y2, end_y3, end_y4, end_y5]))
+
+    return file_name
 
 """
 HOW TO inspect page?

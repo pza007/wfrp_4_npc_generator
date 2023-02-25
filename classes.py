@@ -37,12 +37,133 @@ class NpcSingleton(object):
         self.skills_basic = {}        # {skill_name: [stat_str, stat_total, skill_advances, skill_total]}
         self.skills_advanced = {}     # {skill_name: [stat_str, stat_total, skill_advances, skill_total]}
         self.talents = {}             # {talent_name: (test, advance, description)}
+        self.arcane = None            # [str] e.g. "Beasts"
+        self.spells = {}              # {'Petty': {spell_name: SpellClass, ...},
+                                      #  'Arcane': {spell_name: SpellClass, ...},
+                                      #  'Beasts': {spell_name: SpellClass, ...} }  <- should match self.arcane
+        self.god = None
+        self.blessings = {}           # {name: PrayerClass}
+        self.miracles = {}            # {name: PrayerClass}
 
     def get_init_values(self, **kwargs):
-        from constants import age_by_species, careers_all, skills_all_basic
+        from constants import age_by_species, careers_all, skills_all_basic, skills_all, talents_all, talents_random
+        from functions import random_pick
         """
         set: sex, species, age, class, main career, current carrer, status, xp, basic skills
         """
+        def parse_skill_names():
+            pre_desc = f'NpcSingleton.get_init_values.parse_skill_names: '
+            for i in range(4):
+                career_obj = self.career_main.lvl[i]    # CareerClass
+                out_names = []
+                for skill_name in career_obj.skills:
+                    if skill_name.find("(Any one)") < 0:
+                        out_names.append(skill_name)
+                    else:
+                        # (Any one) -> choose one from list
+                        short_name = skill_name[:skill_name.find('(Any one)') - 1]
+                        _, _, list_of_choices = skills_all[short_name]
+                        # choose one from unique list
+                        names_for_skill = set([short_name + ' (' + choice_name + ')' for choice_name in list_of_choices])
+                        names_previous_careers = []
+                        for j in range(i):
+                            names_previous_careers += self.career_main.lvl[j].skills
+                        names_previous_careers = set(names_previous_careers)
+                        names_current_career = set(career_obj.skills)
+                        names_current = set(out_names)
+                        choose_list = list(names_for_skill - names_previous_careers - names_current_career - names_current)
+                        if len(choose_list) == 0:
+                            error = f'{pre_desc}choose_list for skill: {skill_name} is empty!'
+                            logger.error(error)
+                            raise Exception(error)
+                        new_name = random_pick(choose_list)
+                        out_names.append(new_name)
+
+                # check length
+                if len(career_obj.skills) != len(out_names):
+                    error = f'{pre_desc}Length of input ({len(career_obj.skills)}) != length of output ({len(out_names)})'
+                    logger.error(error)
+                    raise Exception(error)
+                # check unique
+                if len(set(out_names)) != len(out_names):
+                    error = f'{pre_desc}Output values are not unique: {out_names}'
+                    logger.error(error)
+                    raise Exception(error)
+
+                # modify values
+                self.career_main.lvl[i].skills = out_names
+        def parse_talent_names():
+            def get_choose_list(in_lvl, in_names_for_talent):
+                # choose one from unique list
+                names_previous_careers = []
+                for j in range(in_lvl):
+                    names_previous_careers += self.career_main.lvl[j].talents
+                names_previous_careers = set(names_previous_careers)
+                names_current_career = set(career_obj.talents)
+                names_current = set(out_names)
+                choose_list = list(in_names_for_talent - names_previous_careers - names_current_career - names_current)
+                if len(choose_list) == 0:
+                    error = f'{pre_desc}choose_list for talent: {talent_name} is empty!'
+                    logger.error(error)
+                    raise Exception(error)
+                return choose_list
+            pre_desc = f'NpcSingleton.get_init_values.parse_talent_names: '
+
+            for i in range(4):
+                career_obj = self.career_main.lvl[i]    # CareerClass
+                out_names = []
+                for talent_name in career_obj.talents:
+                    if talent_name.find("(Any one)") < 0 and talent_name.find(" or ") < 0 and talent_name != "Random":
+                        out_names.append(talent_name)
+
+                    elif talent_name.find("(Any one)") >= 0:
+                        # (Any one) -> choose one from list
+                        short_name = talent_name[:talent_name.find('(Any one)') - 1]
+                        _, _, _, list_of_choices = talents_all[short_name]  # ["Bonus I", "Perception", "Perception test...", ["Vision", "Taste"]]
+                        names_for_talent = set([short_name + ' (' + choice_name + ')' for choice_name in list_of_choices])
+                        new_name = random_pick(get_choose_list(i, names_for_talent))    # choose one from unique list
+                        out_names.append(new_name)
+
+                    elif talent_name.find(" or ") >= 0:
+                        # sth " or " sth -> pick one from two talents
+                        two_talents = talent_name.split(" or ")
+                        names_for_talent = set(two_talents)
+                        new_name = random_pick(get_choose_list(i, names_for_talent))    # choose one from unique list
+                        out_names.append(new_name)
+
+                    else:   # talent_name == "Random"
+                        names_for_talent = set(talents_random)
+                        new_name = random_pick(get_choose_list(i, names_for_talent))    # choose one from unique list
+                        out_names.append(new_name)
+
+                # check length
+                if len(career_obj.talents) != len(out_names):
+                    error = f'{pre_desc}Length of input ({len(career_obj.talents)}) != length of output ({len(out_names)})'
+                    logger.error(error)
+                    raise Exception(error)
+                # check unique
+                if len(set(out_names)) != len(out_names):
+                    error = f'{pre_desc}Output values are not unique: {out_names}'
+                    logger.error(error)
+                    raise Exception(error)
+
+                # modify values
+                self.career_main.lvl[i].talents = out_names
+        def parse_trappings():
+            from functions import rollXd10
+            pre_desc = f'NpcSingleton.get_init_values.parse_trappings: '
+
+            for i in range(4):
+                career_obj = self.career_main.lvl[i]  # CareerClass
+                out_text = career_obj.trappings
+                indexes = [i.start() for i in re.finditer("[0-9]d10", out_text)]
+                for index in indexes:
+                    number = int(out_text[index:index + 1])  # Xd10
+                    rolled_val = rollXd10(number)
+                    out_text = out_text.replace(out_text[index:index + 4], str(rolled_val))
+                # modify value
+                self.career_main.lvl[i].trappings = out_text
+
         self.sex = kwargs.get('sex')
         self.species = kwargs.get('species')
         # roll age in boundaries
@@ -64,6 +185,10 @@ class NpcSingleton(object):
         self.ch_class = kwargs.get('class')
         self.career_main_name = kwargs.get('career')
         self.career_main = careers_all[self.career_main_name]()
+        # parse words in career (skill names, talents, trappings)
+        parse_skill_names()
+        parse_talent_names()
+        parse_trappings()
         self.career_level = 0
         self.career_current = self.career_main.lvl[self.career_level]
         self.status = self.career_current.status
@@ -88,93 +213,17 @@ class NpcSingleton(object):
         #4  set skills and talents by career
         self.set_skills_career()
         self.set_talents_career()
-        #5  roll_other_things
+        #5  roll_spells (if magical)
+        self.roll_spells()
+        #6  roll_other_things
         self.roll_other_things()
         # update
         self.update_all()
-    def check_npc_1(self):
-        """
-        Check if npc has everything what it supposes to have after self.roll_npc()
-        """
-        pre_desc = f'NpcSingleton.check_npc_1: '
-
-        # INIT
-        if self.height is None:
-            error = f'{pre_desc}Height not set'
-            logger.error(error)
-            raise Exception(error)
-        if self.name is None:
-            error = f'{pre_desc}Name not set'
-            logger.error(error)
-            raise Exception(error)
-        if None in [self.desc_gen_look, self.desc_traits, self.desc_reactions, self.desc_appearance]:
-            error = f'{pre_desc}Description not set'
-            logger.error(error)
-            raise Exception(error)
-        if self.trapping is None:
-            error = f'{pre_desc}Trapping not set'
-            logger.error(error)
-            raise Exception(error)
-        if self.money is None:
-            error = f'{pre_desc}Money not set'
-            logger.error(error)
-            raise Exception(error)
-        if 'Doomed' in self.talents.keys() and self.dooming is None:
-            error = f'{pre_desc}Dooming not set'
-            logger.error(error)
-            raise Exception(error)
-
-        # ATTRIBUTES
-        for stat_name, val in self.attributes.items():
-            if val is None:
-                error = f'{pre_desc}Attribute ({stat_name}) - value not set'
-                logger.error(error)
-                raise Exception(error)
-        #   exactly 5 advances points (self.advance_stats)
-        if sum([advance for [base, advance, total] in self.attributes.values() if advance > 0]) != 5:
-            error = f'{pre_desc}Attributes - sum of advance points !=5'
-            logger.error(error)
-            raise Exception(error)
-
-        # SKILLS
-        sum_advances = 0
-        for skill_name, [stat_str, stat_total, skill_advances, skill_total] in self.skills_basic.items():
-            if skill_total == 0:
-                error = f'{pre_desc}Skill ({skill_name}) - value not set'
-                logger.error(error)
-                raise Exception(error)
-            sum_advances += skill_advances
-        for skill_name, [stat_str, stat_total, skill_advances, skill_total] in self.skills_advanced.items():
-            if skill_total == 0:
-                error = f'{pre_desc}Skill ({skill_name}) - value not set'
-                logger.error(error)
-                raise Exception(error)
-            sum_advances += skill_advances
-        #   exactly 64 advances points (self.roll_skills_species, self.set_skills_career)
-        if sum_advances != 64:
-            error = f'{pre_desc}Skills - sum of advance points !=64'
-            logger.error(error)
-            raise Exception(error)
-
-        # TALENTS
-        #   advance value can be == 0 at this point (even intended!)
-        sum_advances = sum([1 for (test, advance, description) in self.talents.values() if advance > 0])
-        #   for Halfling, Gnome: exactly 7 talents with advance points == 1 (self.roll_talents_species, set_talents_career)
-        if self.species in ["Halfling", "Gnome"]:
-            if sum_advances != 7:
-                error = f'{pre_desc}Talents - number of advanced talents !=7'
-                logger.error(error)
-                raise Exception(error)
-        #   for rest species: exactly 6 talents with advance points == 1 (self.roll_talents_species, set_talents_career)
-        else:
-            if sum_advances != 6:
-                error = f'{pre_desc}Talents - number of advanced talents !=6'
-                logger.error(error)
-                raise Exception(error)
-
     def roll_height(self):
         from functions import random_pick, rollXd10
         from constants import age_by_species, height_by_species
+        pre_desc = f'NpcSingleton.roll_height: '
+
         # consider age
         init_height = 0
         if self.age_str == 'Young':
@@ -196,6 +245,10 @@ class NpcSingleton(object):
             self.height = init_height + rollXd10(3)/100
         elif self.species == "Gnome":
             self.height = init_height + rollXd10(2)/100
+        else:
+            error = f'{pre_desc}Unknows species: {self.species}'
+            logger.error(error)
+            raise Exception(error)
     def roll_name(self):
         from functions import random_pick, roll1d100
         from constants import names_by_sex, surnames_by_species, surname_Suffix_Male_Dwarf, surname_Suffix_Female_Dwarf
@@ -211,7 +264,7 @@ class NpcSingleton(object):
             if self.sex == 'Female' and roll_val <= 33:
                 out_surname += random_pick(surname_Suffix_Female_Dwarf)
 
-        # Noble - handles later
+        # Noble - handle in roll_other_things()
 
         self.name = out_name + ' ' + out_surname
     def roll_description(self):
@@ -275,50 +328,153 @@ class NpcSingleton(object):
         self.update_attributes()
     def roll_skills_species(self):
         """
+        Roll 6 skills, can be the same as in career
         :return: out_skills: {skill_name: advance}
         """
-        from constants import skills_by_species
+        from constants import skills_by_species, skills_all
+        from functions import random_pick
+        def parse_skill_names(in_skill_names):
+            pre_desc = f'NpcSingleton.roll_skills_species.parse_skill_names: '
 
-        # roll 6 skills
-        in_skills = skills_by_species[self.species]
-        skills = []     # [(skill_name: advance_value) ]
-        indexes = []
-        while len(indexes) < 6:
-            idx = random.randint(0, len(in_skills) - 1)
-            if idx not in indexes:
-                indexes.append(idx)
-                skills.append((in_skills[idx], 0))
+            out_names = []
+            for skill_name in in_skill_names:
+                if skill_name.find("(Any one)") < 0:
+                    out_names.append(skill_name)
+                else:
+                    # (Any one) -> choose one from list
+                    short_name = skill_name[:skill_name.find('(Any one)') - 1]
+                    _, _, list_of_choices = skills_all[short_name]
+                    # choose one, different from current
+                    names_for_skill = set([short_name + ' (' + choice_name + ')' for choice_name in list_of_choices])
+                    names_current = set(out_names)
+                    choose_list = list(names_for_skill - names_current)
+                    if len(choose_list) == 0:
+                        error = f'{pre_desc}choose_list for skill: {skill_name} is empty!'
+                        logger.error(error)
+                        raise Exception(error)
+                    new_name = random_pick(choose_list)
+                    out_names.append(new_name)
 
-        # advance skills values
-        for i in range(len(skills)):
-            skill_name, advance = skills[i]
-            if i < 3:
-                skills[i] = (skill_name, 5)     # advance 3 skills by value: 5
-            else:
-                skills[i] = (skill_name, 3)     # advance 3 skills by value: 3
+            # check length
+            if len(in_skill_names) != len(out_names):
+                error = f'{pre_desc}Length of input ({len(in_skill_names)}) != length of output ({len(out_names)})'
+                logger.error(error)
+                raise Exception(error)
+            # check unique
+            if len(set(out_names)) != len(out_names):
+                error = f'{pre_desc}Output values are not unique: {out_names}'
+                logger.error(error)
+                raise Exception(error)
 
+            return out_names
+
+        # roll 6 skill names
+        skill_names = [name for name in random.sample(skills_by_species[self.species], 6)]
         # parse
-        out_skills = self.parse_skill_words(skills)     # {skill_name: advance}
+        skill_names = parse_skill_names(skill_names)
+        # advance skills values
+        skills = {}     # {skill_name: advance}
+        for i, skill_name in enumerate(skill_names):
+            if i < 3:
+                skills.update({skill_name: 5})  # advance 3 skills by value: 5
+            else:
+                skills.update({skill_name: 3})  # advance 3 skills by value: 3
         # add
-        self.add_skills(out_skills)
+        self.add_skills(skills)
         # update
         self.update_skills()
     def roll_talents_species(self):
-        from constants import talents_by_species
+        """
+        Roll 5 (or 6) talents, can be the same as in career
+        :return: out_skills: {skill_name: advance}
+        """
+        from constants import talents_by_species, talents_all, talents_random
+        from functions import random_pick
+        def parse_talent_names(in_talent_names):
+            pre_desc = f'NpcSingleton.roll_talents_species.parse_talent_names: '
 
-        # roll 5 talents
-        in_talents = talents_by_species[self.species]
-        talents = [(talent_name, 1) for talent_name in in_talents]  # [(talent_name, advance), ...]
+            out_names = []
+            for talent_name in in_talent_names:
+                if talent_name.find("(Any one)") < 0 and talent_name.find(" or ") < 0 and talent_name != "Random":
+                    out_names.append(talent_name)
+
+                elif talent_name.find("(Any one)") >= 0:
+                    # (Any one) -> choose one from list
+                    short_name = talent_name[:talent_name.find('(Any one)') - 1]
+                    _, _, _, list_of_choices = talents_all[short_name]  # ["Bonus I", "Perception", "Perception test...", ["Vision", "Taste"]]
+                    # choose one, different from current
+                    names_for_talent = set([short_name + ' (' + choice_name + ')' for choice_name in list_of_choices])
+                    names_current = set(out_names)
+                    choose_list = list(names_for_talent - names_current)
+                    if len(choose_list) == 0:
+                        error = f'{pre_desc}choose_list for talent: {talent_name} is empty!'
+                        logger.error(error)
+                        raise Exception(error)
+                    new_name = random_pick(choose_list)
+                    out_names.append(new_name)
+
+                elif talent_name.find(" or ") >= 0:
+                    # sth " or " sth -> pick one from two talents
+                    two_talents = talent_name.split(" or ")
+                    # choose one, different from current
+                    names_for_talent = set(two_talents)
+                    names_current = set(out_names)
+                    choose_list = list(names_for_talent - names_current)
+                    if len(choose_list) == 0:
+                        error = f'{pre_desc}choose_list for talent: {talent_name} is empty!'
+                        logger.error(error)
+                        raise Exception(error)
+                    new_name = random_pick(choose_list)
+                    out_names.append(new_name)
+
+                else:   # talent_name == "Random"
+                    # choose one, different from current
+                    names_for_talent = set(talents_random)
+                    names_current = set(out_names)
+                    choose_list = list(names_for_talent - names_current)
+                    if len(choose_list) == 0:
+                        error = f'{pre_desc}choose_list for talent: {talent_name} is empty!'
+                        logger.error(error)
+                        raise Exception(error)
+                    new_name = random_pick(choose_list)
+                    out_names.append(new_name)
+
+            # check length
+            if len(in_talent_names) != len(out_names):
+                error = f'{pre_desc}Length of input ({len(in_talent_names)}) != length of output ({len(out_names)})'
+                logger.error(error)
+                raise Exception(error)
+            # check unique
+            if len(set(out_names)) != len(out_names):
+                error = f'{pre_desc}Output values are not unique: {out_names}'
+                logger.error(error)
+                raise Exception(error)
+
+            return out_names
+
+        # roll talent names
+        talent_names = talents_by_species[self.species]
         # parse
-        out_talents = self.parse_talent_words(talents)  # {talent_name: advance}
-        # add
-        self.add_talents(out_talents)
-        # modify
-        self.modify_stats_by_talents(out_talents)
+        talent_names = parse_talent_names(talent_names)
+        # advance talents values
+        talents = {name: 1 for name in talent_names}
+        ok, reason = self.can_add_talents(talents)
+        if ok:
+            # modify stats
+            self.modify_stats_for_new_talents(talents)  # all talents are new and have advance == 1
+            # add
+            self.add_talents(talents)
+        else:
+            logger.error(reason)
+            raise Exception(reason)
     def set_skills_career(self):
+        """
+        Add and advance 8 skills from career
+        Note: names are already parsed in get_init_values()
+        """
         from functions import random_pick
         # add 8 skills from career
-        skills = [(skill_name, 0) for skill_name in self.career_current.skills]  # [(skill_name: value), ...]
+        skill_names = self.career_current.skills
         # pick one of advance option (in sum 40 points)
         example = [
             [5, 5, 5, 5, 5, 5, 5, 5],
@@ -333,30 +489,53 @@ class NpcSingleton(object):
             [10, 10, 10, 10, 0, 0, 0, 0]]
         out_values = example[random_pick(list(range(len(example))))]
         # advance skills values
-        for i in range(len(skills)):
-            skill_name, advance = skills[i]
-            skills[i] = (skill_name, out_values[i])
-        # parse
-        out_skills = self.parse_skill_words(skills)     # {skill_name: advance}
+        skills = {}
+        for i, skill_name in enumerate(skill_names):
+            skills.update({skill_name: out_values[i]})
         # add
-        self.add_skills(out_skills)
+        self.add_skills(skills)
         # update
         self.update_skills()
     def set_talents_career(self):
-        from functions import random_pick
-
-        # get unique talent names
-        talent_names = list(set(self.career_current.talents) - set(self.talents.keys()))
-        talents = [(name, 0) for name in talent_names]  # [(talent_name, advance), ...]
-        # parse
-        out_talents = self.parse_talent_words(talents)    # {talent_name: advance_value}
-        # advance (by 1) only one, randomly picked talent
+        """
+        Add all talents from career
+        Advance (by 1) only one, randomly picked talent, the rest of talents will have 0 advances
+        Note: names are already parsed in get_init_values()
+        """
+        # get all talents from career
+        talents = {name: 0 for name in self.career_current.talents}  # {talent_name: advance_value}
+        # advance (by 1) only one talent
+        for talent_name in talents.keys():
+            ok, reason = self.can_add_talents({talent_name: 1})
+            if ok:
+                talents[talent_name] = 1
+                # modify stats?
+                if talent_name not in self.talents.keys():
+                    self.modify_stats_for_new_talents({talent_name: 1})  # talent is new and has advance == 1
+                break
         # the rest of talents will have 0 advances
-        out_talents.update({random_pick(list(out_talents.keys())): 1})
-        # add
-        self.add_talents(out_talents)
-        # modify
-        self.modify_stats_by_talents(out_talents)
+        self.add_talents(talents)
+    def roll_spells(self):
+        from spells import spells_petty
+        # check if 'Petty Magic' is available
+        if 'Petty Magic' in self.talents.keys():
+            # add a number of spells equal to npc's Willpower Bonus
+            bWP = self.attributes['WP'][2] // 10
+            out_dict = {}
+            for spell_name in random.sample(spells_petty.keys(), bWP):
+                out_dict.update({spell_name: spells_petty[spell_name]})
+            self.spells.update({'Petty': out_dict})
+
+            # check if 'Arcane Magic' is available
+            for talent_name in self.talents.keys():
+                if talent_name.find('Arcane Magic') >= 0:
+                    # set values
+                    idx_start = talent_name.find('(')
+                    idx_end = talent_name[idx_start+1:].find(')')
+                    arcane_str = talent_name[idx_start+1: idx_end]
+                    self.arcane = arcane_str
+                    self.spells.update({'Arcane': {}})
+                    self.spells.update({self.arcane: {}})
     def roll_other_things(self):
         from functions import random_pick
         from constants import surname_Suffix_Human, doomings_all, trappings_by_class
@@ -371,12 +550,13 @@ class NpcSingleton(object):
             self.dooming = random_pick(doomings_all)
         else:
             self.dooming = '-'
-        # trappings
-        self.trapping = self.roll_trappings(trappings_by_class[self.ch_class] + ", " + self.career_current.trappings)
+        # trappings (for career - already parsed)
+        self.trapping = self.parse_trappings(trappings_by_class[self.ch_class]) + ", " + self.career_current.trappings
+
         # money
         self.money = self.roll_money(self.career_current.status)
     @staticmethod
-    def roll_trappings(in_string):
+    def parse_trappings(in_string):
         from functions import rollXd10
         indexes = [i.start() for i in re.finditer("[0-9]d10", in_string)]
         for index in indexes:
@@ -401,9 +581,108 @@ class NpcSingleton(object):
         self.update_attributes()
         self.update_skills()
 
+    def check_npc_1(self):
+        """
+        Check if npc has everything what it supposes to have after self.roll_npc()
+        """
+        pre_desc = f'NpcSingleton.check_npc_1: '
+
+        # INIT
+        if self.height is None:
+            error = f'{pre_desc}Height not set'
+            logger.error(error)
+            raise Exception(error)
+        if self.name is None:
+            error = f'{pre_desc}Name not set'
+            logger.error(error)
+            raise Exception(error)
+        if None in [self.desc_gen_look, self.desc_traits, self.desc_reactions, self.desc_appearance]:
+            error = f'{pre_desc}Description not set'
+            logger.error(error)
+            raise Exception(error)
+        if self.trapping is None:
+            error = f'{pre_desc}Trapping not set'
+            logger.error(error)
+            raise Exception(error)
+        if self.money is None:
+            error = f'{pre_desc}Money not set'
+            logger.error(error)
+            raise Exception(error)
+        if 'Doomed' in self.talents.keys() and self.dooming is None:
+            error = f'{pre_desc}Dooming not set'
+            logger.error(error)
+            raise Exception(error)
+
+        # ATTRIBUTES
+        for stat_name, val in self.attributes.items():
+            if val is None:
+                error = f'{pre_desc}Attribute ({stat_name}) - value not set'
+                logger.error(error)
+                raise Exception(error)
+        #   sum of career attributes == 5 (self.advance_stats)
+        if sum([self.attributes[stat_name][1] for stat_name in self.career_current.advances]) != 5:
+            error = f'{pre_desc}Attributes - sum of advance points !=5'
+            logger.error(error)
+            raise Exception(error)
+
+        # SKILLS
+        sum_advances = 0
+        for skill_name, [stat_str, stat_total, skill_advances, skill_total] in self.skills_basic.items():
+            if skill_total == 0:
+                error = f'{pre_desc}Skill ({skill_name}) - value not set'
+                logger.error(error)
+                raise Exception(error)
+            sum_advances += skill_advances
+        for skill_name, [stat_str, stat_total, skill_advances, skill_total] in self.skills_advanced.items():
+            if skill_total == 0:
+                error = f'{pre_desc}Skill ({skill_name}) - value not set'
+                logger.error(error)
+                raise Exception(error)
+            sum_advances += skill_advances
+        #   exactly 64 advances points (self.roll_skills_species, self.set_skills_career)
+        if sum_advances != 64:
+            error = f'{pre_desc}Skills - sum of advance points !=64'
+            logger.error(error)
+            raise Exception(error)
+
+        # TALENTS
+        #   advance value can be == 0 at this point (even intended!)
+        sum_advances = sum([1 for (test, advance, description) in self.talents.values() if advance > 0])
+        #   for Halfling, Gnome: exactly 7 talents with advance points == 1 (self.roll_talents_species=6, set_talents_career=1)
+        if self.species in ["Halfling", "Gnome"]:
+            if sum_advances != 7:
+                error = f'{pre_desc}Talents - number of advanced talents !=7'
+                logger.error(error)
+                raise Exception(error)
+        #   for rest species: exactly 6 talents with advance points == 1 (self.roll_talents_species=5, set_talents_career=1)
+        else:
+            if sum_advances != 6:
+                error = f'{pre_desc}Talents - number of advanced talents !=6'
+                logger.error(error)
+                raise Exception(error)
+
+        # SPELLS
+        if 'Petty Magic' in self.talents.keys():
+            if 'Petty' not in self.spells.keys():
+                error = f'{pre_desc}Spells - petty spells not set.'
+                logger.error(error)
+                raise Exception(error)
+            elif len(self.spells['Petty']) == 0:
+                error = f'{pre_desc}Spells - petty spells not set.'
+                logger.error(error)
+                raise Exception(error)
+            # Arcane Magic
+            for talent_name in self.talents.keys():
+                if talent_name.find('Arcane Magic') >= 0:
+                    if self.arcane is None:
+                        error = f'{pre_desc}Spells - arcane not set.'
+                        logger.error(error)
+                        raise Exception(error)
+
     def advance_by_xp(self, xp_0=None):
         """
         Advance from career lvl 0 to lvl 3
+        :return: reason:    <str>
         """
         from constants import talents_all
         def advance_talents(xp_val):
@@ -418,33 +697,12 @@ class NpcSingleton(object):
             reason = ''
 
             # get talents for current career
-            talents = []            # [(talent_name, advance), ... ]
-            missing_talents = []    # [(talent_name, advance), ... ]
-            mapping = {}            # {talent_name_career: talent_name_npc}
-            for talent_name, (talent_test, talent_advance, talent_description) in self.talents.items():
-                if talent_name in self.career_current.talents:
-                    talents.append((talent_name, talent_advance))
-                    mapping.update({talent_name: talent_name})
-                else:
-                    short_name = talent_name.split(' (')[0]
-                    for career_talent_name in self.career_current.talents:
-                        if short_name == career_talent_name.split(' (')[0]:
-                            talents.append((talent_name, talent_advance))
-                            mapping.update({career_talent_name: talent_name})
-            #   not all talents were found -> get missing ones, parse, add with advance=0, modify stats
-            if len(mapping) < len(self.career_current.talents):
-                for talent_name in self.career_current.talents:
-                    if talent_name not in mapping.keys():
-                        missing_talents.append((talent_name, 0))
-            #   add new talents
-            talents = talents + missing_talents
-            out_talents = self.parse_talent_words(talents)  # {talent_name: advance}
-            for talent_name, advance in out_talents.items():
-                if talent_name not in self.talents.keys():
-                    self.add_talents({talent_name: advance})
+            talents = {}    # {talent_name: advance}
+            for talent_name in self.career_current.talents:
+                talents.update({talent_name: self.talents[talent_name][1]})  # {talent_name: (talent_test, talent_advance, talent_description)}
 
             # try to advance each talent to maximal value (defined in constants.all_talents)
-            for talent_name, talent_advance in out_talents.items():
+            for talent_name, talent_advance in talents.items():
                 short_name = talent_name.split(' (')[0]
                 limit, _, _, _ = talents_all[short_name]
                 if limit.isdecimal():
@@ -463,8 +721,17 @@ class NpcSingleton(object):
                     cost = 100 + (val-1)*100
                     if xp_val >= cost:
                         xp_val -= cost
-                        talent_test, _, talent_description = self.talents[talent_name]   # (test, advance, description)
-                        self.talents.update({talent_name: (talent_test, val, talent_description)})
+                        # modify stats?
+                        if val == 1:
+                            if talent_name in self.talents.keys():
+                                if self.talents[talent_name][1] == 0:
+                                    # talent was added with advance == 0, but now it has advance == 1
+                                    self.modify_stats_for_new_talents({talent_name: val})
+                            else:
+                                # talent in new and has advance == 1
+                                self.modify_stats_for_new_talents({talent_name: val})
+                        # add to previous value!
+                        self.add_talents({talent_name: 1})
                     else:
                         reason = f'To upgrade talent:{talent_name} to lvl: {val}/{max_advance} cost>xp: {cost}>{xp_val}'
                         break
@@ -478,15 +745,135 @@ class NpcSingleton(object):
                     reason = f'Talent:{talent_name} advance<adv_sum: {self.talents[talent_name][1]}<{max_advance}'
                     break
 
-            # modify
-            self.modify_stats_by_talents(out_talents)
-
             # return advance not completed
             if len(reason) > 0:
                 return xp_val, False, reason
-            if cnt != len(out_talents):
-                reason = f'Number of fully advanced talents: {cnt} != {len(out_talents)}'
+            if cnt != len(talents):
+                reason = f'Number of fully advanced talents: {cnt} != {len(talents)}'
                 return xp_val, False, reason
+            # return advance fully completed
+            return xp_val, True, reason
+        def advance_spells(xp_val):
+            """
+            Advance spells for current career
+            :return: xp: int
+            :return: boolean: Was there enough xp to fully advance in this domain?
+            :return: reason
+            """
+            pre_desc = f'NpcSingleton.advance_by_xp.advance_spells: '
+            reason = ''
+            from spells import spells_petty, spells_arcane, spells_lore_all
+            def get_advance_plan():
+                # calculate how many advances in each group to make
+                num_petty_spells = len(self.spells['Petty'])       # shall be set at: roll_spells()
+                try:
+                    num_arcane_spells = len(self.spells['Arcane'])
+                except KeyError:
+                    num_arcane_spells = 0
+                try:
+                    num_lore_spells = len(self.spells[self.arcane])
+                except KeyError:
+                    num_lore_spells = 0
+
+                if self.career_level == 0:
+                    # 'Petty': 3
+                    val_p = 3-num_petty_spells if num_petty_spells <= 3 else 0
+                    val_a = 0
+                    val_l = 0
+                elif self.career_level == 1:
+                    # 'Petty': 4, 'Arcane': 2, 'Lore': 1
+                    val_p = 4-num_petty_spells   if num_petty_spells <= 4 else 0
+                    val_a = 2-num_arcane_spells if num_arcane_spells <= 2 else 0
+                    val_l = 1-num_lore_spells     if num_lore_spells <= 1 else 0
+                elif self.career_level == 2:
+                    # 'Petty': 5, 'Arcane': 3, 'Lore': 3
+                    val_p = 5-num_petty_spells   if num_petty_spells <= 5 else 0
+                    val_a = 3-num_arcane_spells if num_arcane_spells <= 3 else 0
+                    val_l = 3-num_lore_spells     if num_lore_spells <= 3 else 0
+                else:   # lvl3
+                    # 'Petty': 5, 'Arcane': 4, 'Lore': 6
+                    val_p = 5-num_petty_spells   if num_petty_spells <= 5 else 0
+                    val_a = 4-num_arcane_spells if num_arcane_spells <= 4 else 0
+                    val_l = 6-num_lore_spells     if num_lore_spells <= 6 else 0
+                return {'Petty': val_p, 'Arcane': val_a, 'Lore': val_l}
+            def get_cost(spell_group):
+                bWP = self.attributes['WP'][2]//10  # Willpower Bonus
+                if spell_group == 'Petty':
+                    num_known_spells = len(self.spells['Petty'])
+                    if num_known_spells <= bWP: return 50
+                    elif bWP < num_known_spells <= bWP*2: return 100
+                    elif bWP*2 < num_known_spells <= bWP*3: return 150
+                    elif bWP*3 < num_known_spells <= bWP*4: return 200
+                else:   # 'Arcane' or Lore magic
+                    num_known_spells = len(self.spells['Arcane']) + len(self.spells[self.arcane])
+                    if num_known_spells <= bWP: return 100
+                    elif bWP < num_known_spells <= bWP*2: return 200
+                    elif bWP*2 < num_known_spells <= bWP*3: return 300
+                    elif bWP*3 < num_known_spells <= bWP*4: return 400
+                    elif bWP*4 < num_known_spells <= bWP*5: return 500
+                    elif bWP*5 < num_known_spells <= bWP*6: return 600
+                    elif bWP*6 < num_known_spells <= bWP*7: return 700
+
+            # special workaround to get Arcane and Lore spells earlier
+            # if available, advance talent 'Arcane Magic' from 0 to 1 and have access to spells
+            if self.arcane is None:
+                for talent_name in self.talents.keys():
+                    if talent_name.find('Arcane Magic') >= 0:
+                        if self.talents[talent_name][1] == 0:  # {talent_name: (talent_test, talent_advance, talent_description)}
+                            if xp_val >= 100:
+                                xp_val -= 100
+                                # modify stats
+                                self.modify_stats_for_new_talents({talent_name: 1})
+                                # add to previous value!
+                                self.add_talents({talent_name: 1})
+                                break
+                            else:
+                                reason = f'To upgrade talent:{talent_name} to lvl: {1}/{1} cost>xp: {100}>{xp_val}'
+                                break
+
+
+            # check if 'Petty Magic' is available
+            if 'Petty' in self.spells.keys():
+                advance_plan = get_advance_plan()
+                spell_names = set(spells_petty.keys())-set(self.spells['Petty'].keys())     # get unique spell names
+                for spell_name in random.sample(spell_names, advance_plan['Petty']):
+                    cost = get_cost('Petty')
+                    if xp_val >= cost:
+                        xp_val -= cost
+                        self.spells['Petty'].update({spell_name: spells_petty[spell_name]})
+                    else:
+                        reason = f'To advance spell:{spell_name} cost>xp: {cost}>{xp_val}'
+                        break
+            if len(reason) > 0:
+                return xp_val, False, reason
+
+            # check if arcane is available
+            if self.arcane is not None:
+                advance_plan = get_advance_plan()
+                # ARCANE
+                spell_names = set(spells_arcane.keys()) - set(self.spells['Arcane'].keys())
+                for spell_name in random.sample(spell_names, advance_plan['Arcane']):
+                    cost = get_cost('Arcane')
+                    if xp_val >= cost:
+                        xp_val -= cost
+                        self.spells['Arcane'].update({spell_name: spells_arcane[spell_name]})
+                    else:
+                        reason = f'To advance spell:{spell_name} cost>xp: {cost}>{xp_val}'
+                        break
+                # LORE
+                spells_lore = spells_lore_all[self.arcane]
+                spell_names = set(spells_lore.keys()) - set(self.spells[self.arcane].keys())
+                for spell_name in random.sample(spell_names, advance_plan['Lore']):
+                    cost = get_cost('Lore')
+                    if xp_val >= cost:
+                        xp_val -= cost
+                        self.spells[self.arcane].update({spell_name: spells_lore[spell_name]})
+                    else:
+                        reason = f'To advance spell:{spell_name} cost>xp: {cost}>{xp_val}'
+                        break
+            if len(reason) > 0:
+                return xp_val, False, reason
+
             # return advance fully completed
             return xp_val, True, reason
         def advance_stats(xp_val):
@@ -563,7 +950,7 @@ class NpcSingleton(object):
             return xp_val, True, reason
         def advance_skills(xp_val):
             """
-            8 skills from current and previous careers -> advance to 'adv_sum' value
+            8 skills from current and previous levels of career -> advance to 'adv_sum' value
             :return: xp: int
             :return: boolean: Was there enough xp to fully advance in this domain?
             :return: reason
@@ -595,56 +982,29 @@ class NpcSingleton(object):
             cnt = 0
             reason = ''
 
-            adv_sum = (self.career_level + 1) * 5
-            # get all skill names
-            skill_names = []
-            for i in range(self.career_level, -1, -1):
-                skill_names = skill_names + self.career_main.lvl[i].skills   # e.g. ['Lore (Any)', 'Track']
-            #   pick 8 randomly, without repetitions
-            skill_names = random.sample(skill_names, 8)
-
+            # get skill names from current and previous levels of career
+            all_skill_names = []
+            for i in range(self.career_level+1):
+                all_skill_names = all_skill_names + self.career_main.lvl[i].skills
+            # pick 8 randomly, without repetitions
+            skill_names = random.sample(all_skill_names, 8)
             # get current advance values of skills
-            skills = []  # [(skill_name, advance), ...]
+            skills = {}   # {skill_name: advance_value}
             for skill_name in skill_names:
                 name_short = skill_name.split(' (')[0]
-
                 # in skill_basic?
                 if name_short in self.skills_basic.keys():
                     [_, _, skill_advances, _] = self.skills_basic[name_short]  # [stat_str, stat_total, skill_advances, skill_total]
-                    skills.append((skill_name, skill_advances))
-
-                # in skill_advanced?
+                    skills.update({skill_name: skill_advances})
+                # in skill_advanced
                 else:
-                    # try skill's full name
-                    if skill_name in self.skills_advanced.keys():
-                        [_, _, skill_advances, _] = self.skills_advanced[skill_name]  # [stat_str, stat_total, skill_advances, skill_total]
-                        skills.append((skill_name, skill_advances))
-                    else:
-                        # skill name has '(Any one)' and there is according name in skill_advanced?
-                        if skill_name.find('(Any one)') >= 0 and name_short in [name.split(' (')[0] for name in self.skills_advanced.keys()]:
-                            # {skill_name: [stat_str, stat_total, skill_advances, skill_total]}
-                            tmp = [(name, val) for name, [_, _, val, _] in self.skills_advanced.items() if name.find(name_short) >= 0]
-                            tmp.sort()
-                            final_name = tmp[-1][0]  # pick skill with the highest advance value
-                            [_, _, skill_advances, _] = self.skills_advanced[final_name]
-                            skills.append((final_name, skill_advances))
-
-                        # skill name is new, even for skill_advanced
-                        else:
-                            skills.append((skill_name, 0))
-            # parse
-            out_skills = self.parse_skill_words(skills)  # {skill_name: advance_value}
-
-            # check if 8 skills available
-            if len(out_skills) != 8:
-                error = f'{pre_desc}Less then 8 skills available. ' \
-                        f'career={self.career_current.name}, skill_names={skill_names}, out_skills={out_skills}'
-                logger.error(error)
-                raise Exception(error)
+                    [_, _, skill_advances, _] = self.skills_advanced[skill_name]  # [stat_str, stat_total, skill_advances, skill_total]
+                    skills.update({skill_name: skill_advances})
 
             # advance
-            for skill_name in out_skills.keys():
-                advance = out_skills[skill_name]
+            adv_sum = (self.career_level + 1) * 5
+            for skill_name in skills.keys():
+                advance = skills[skill_name]
                 if advance < adv_sum:
                     for j in range(adv_sum - advance):
                         cost = get_cost(advance)
@@ -673,7 +1033,7 @@ class NpcSingleton(object):
                 return xp_val, False, reason
             # return advance fully completed
             return xp_val, True, reason
-        def advance_next_level(xp_val, npc):
+        def advance_next_level(xp_val):
             """
             To be able to advance to next career level, npc must have:
             -> all stats advanced: (already fulfilled)!
@@ -696,64 +1056,79 @@ class NpcSingleton(object):
 
             # deduct xp
             xp_val -= 100
-            # switch to new career
-            npc.career_level += 1
-            npc.career_current = npc.career_main.lvl[npc.career_level]
-            npc.status = npc.career_current.status
-
-            # new skills - will be added in next iteration
-            # new talents - will be added in next iteration
-
+            # new career lvl
+            self.career_level += 1
+            self.career_current = self.career_main.lvl[self.career_level]
+            # new status
+            self.status = self.career_current.status
+            # new skills
+            skills = {name: 0 for name in self.career_current.skills}
+            self.add_skills(skills)
+            self.update_skills()
+            # new talents
+            talents = {name: 0 for name in self.career_current.talents}
+            self.add_talents(talents)
             # new trappings
-            npc.trapping = npc.roll_trappings(npc.trapping + ", " + npc.career_current.trappings)
+            self.trapping = self.trapping + ", " + self.career_current.trappings   # already parsed
             # new money
-            npc.money = npc.money + ', ' + npc.roll_money(npc.career_current.status)
+            self.money = self.money + ', ' + self.roll_money(self.career_current.status)
 
             return xp_val, True, f''
 
         if xp_0 is None:
             xp_0 = self.xp_start
 
+        reason = ''
         if 0 <= self.career_level <= 3:
             logger.debug(f'\t- Career lvl {self.career_level+1}')
-            # ---- Talents
-            xp_1, f_1, reason_1 = advance_talents(xp_0)
+            # ---- Spells
+            xp_1, f_1, reason_1 = advance_spells(xp_0)
             self.update_all()
-            logger.debug(f'\t\ttalents, xp_spent={xp_0-xp_1}')
+            logger.debug(f'\t\tspells, xp_spent={xp_0 - xp_1}')
             if not f_1:
                 self.xp_left = xp_1
                 logger.debug(f'\t\t\tstopped! reason={reason_1}, xp_left={self.xp_left}')
-                return
-            # --- Stats
-            xp_2, f_2, reason_2 = advance_stats(xp_1)
+                return reason_1
+            # ---- Talents
+            xp_2, f_2, reason_2 = advance_talents(xp_1)
             self.update_all()
-            logger.debug(f'\t\tstats, xp_spent={xp_1-xp_2}')
+            logger.debug(f'\t\ttalents, xp_spent={xp_1-xp_2}')
             if not f_2:
                 self.xp_left = xp_2
                 logger.debug(f'\t\t\tstopped! reason={reason_2}, xp_left={self.xp_left}')
-                return
-            # ---- Skills
-            xp_3, f_3, reason_3 = advance_skills(xp_2)
+                return reason_2
+            # --- Stats
+            xp_3, f_3, reason_3 = advance_stats(xp_2)
             self.update_all()
-            logger.debug(f'\t\tskills, xp_spent={xp_2-xp_3}')
+            logger.debug(f'\t\tstats, xp_spent={xp_2-xp_3}')
             if not f_3:
                 self.xp_left = xp_3
                 logger.debug(f'\t\t\tstopped! reason={reason_3}, xp_left={self.xp_left}')
-                return
-            # ---- Advance to next level?
-            xp_4, f_4, reason_4 = advance_next_level(xp_3, self)
+                return reason_3
+            # ---- Skills
+            xp_4, f_4, reason_4 = advance_skills(xp_3)
             self.update_all()
-            if f_4:
-                logger.debug(f'\t\tadvance to next level, xp_spent={xp_0-xp_4}, xp_left={xp_4}')
-                self.advance_by_xp(xp_4)  # repeat the function
-            else:
+            logger.debug(f'\t\tskills, xp_spent={xp_3-xp_4}')
+            if not f_4:
                 self.xp_left = xp_4
                 logger.debug(f'\t\t\tstopped! reason={reason_4}, xp_left={self.xp_left}')
-                return
+                return reason_4
+            # ---- Advance to next level?
+            xp_5, f_5, reason_5 = advance_next_level(xp_4)
+            self.update_all()
+            if f_5:
+                logger.debug(f'\t\tadvance to next level, xp_spent={xp_0-xp_5}, xp_left={xp_5}')
+                reason = self.advance_by_xp(xp_5)  # repeat the function
+            else:
+                self.xp_left = xp_5
+                logger.debug(f'\t\t\tstopped! reason={reason_5}, xp_left={self.xp_left}')
+                return reason_5
 
+        return reason
     def advance_continue(self, xp_0):
         """
         Continue advancing, after reaching career lvl 3
+        :return: reason:    <str>
         """
         from constants import talents_all
 
@@ -792,7 +1167,7 @@ class NpcSingleton(object):
             for stat_name in stat_names:
                 plan_stats.append((stat_name, max_advance))
 
-            # SKILLS - all above 0: max_value + 10
+            # SKILLS - for all that are >=0: max_value + 10
             #   get all skills
             plan_skills = []
             skills = []     # e.g. [('Art', basic), ...]
@@ -848,9 +1223,6 @@ class NpcSingleton(object):
                 else:
                     reason = f'Talent:{talent_name} advance<adv_sum: {self.talents[talent_name][1]}<{max_advance}'
                     break
-
-            # modify
-            self.modify_stats_by_talents(out_talents)
 
             # return advance not completed
             if len(reason) > 0:
@@ -993,6 +1365,7 @@ class NpcSingleton(object):
             return xp_val, True, reason
 
         plan = get_plan()
+        reason = ''
 
         if len(plan['talents']) > 0:
             # ---- Talents
@@ -1002,7 +1375,7 @@ class NpcSingleton(object):
             if not f_1:
                 self.xp_left = xp_1
                 logger.debug(f'\t\t\tstopped! reason={reason_1}, xp_left={self.xp_left}')
-                return
+                return reason_1
         else:
             xp_1 = xp_0
 
@@ -1013,7 +1386,7 @@ class NpcSingleton(object):
         if not f_2:
             self.xp_left = xp_2
             logger.debug(f'\t\t\tstopped! reason={reason_2}, xp_left={self.xp_left}')
-            return
+            return reason_2
 
         # ---- Skills
         xp_3, f_3, reason_3 = advance_skills(xp_2)
@@ -1022,10 +1395,12 @@ class NpcSingleton(object):
         if not f_3:
             self.xp_left = xp_3
             logger.debug(f'\t\t\tstopped! reason={reason_3}, xp_left={self.xp_left}')
-            return
+            return reason_3
 
         # ---- Continue (if not returned at this point)
         self.advance_continue(xp_3)
+
+        return reason
 
     def update_attributes(self):
         # stats - calculate all total values
@@ -1033,6 +1408,11 @@ class NpcSingleton(object):
             [base, advance, total] = self.attributes[stat_name]   # {stat_name: [base, advance, total]}
             total = base + advance
             self.attributes.update({stat_name: [base, advance, total]})
+        #   - special for "Fate", "Fortune", "Resilience", "Resolve"
+        if self.attributes["Fate"][2] > self.attributes["Fortune"][2]:
+            self.attributes["Fortune"] = self.attributes["Fate"]
+        if self.attributes["Resilience"][2] > self.attributes["Resolve"][2]:
+            self.attributes["Resolve"] = self.attributes["Resilience"]
 
         # wounds - calculate based on new stats
         bonusS = self.attributes['S'][2] // 10  # total
@@ -1051,53 +1431,6 @@ class NpcSingleton(object):
         elif self.species == "Gnome":
             wounds_val = 2 * bonusT + bonusWP
         self.attributes.update({'Wounds': [wounds_val, 0, wounds_val]})
-
-    @staticmethod
-    def parse_skill_words(in_skills):
-        """
-        :param in_skills:     [(skill_name, advance), ...]
-        :return: out_skills:  {skill_name: advance_value}
-        """
-        from functions import random_pick
-        from constants import skills_all
-        pre_desc = f'NpcSingleton.parse_skill_words: '
-
-        in_skills_names = [name for name, advance in in_skills]
-        out_skills = {}
-        # get all 'normal' names
-        for skill_name, advance in in_skills:
-            if skill_name.find("(Any one)") < 0:
-                # unique!
-                if skill_name in out_skills.keys():
-                    error = f'{pre_desc}Parsed skill name: {skill_name} already exists: {out_skills.keys()}'
-                    logger.error(error)
-                    raise Exception(error)
-                # add
-                out_skills.update({skill_name: advance})
-
-        # (Any one) -> choose one from list
-        for skill_name, advance in in_skills:
-            if skill_name.find("(Any one)") >= 0:
-                short_name = skill_name[:skill_name.find('(Any one)') - 1]
-                _, _, list_of_choices = skills_all[short_name]
-                # unique!
-                choose_list = list(set([short_name + ' (' + choice_name + ')' for choice_name in list_of_choices]) - set(in_skills_names) - set(out_skills.keys()))
-                new_name = random_pick(choose_list)
-                # unique!
-                if new_name in out_skills.keys():
-                    error = f'{pre_desc}Parsed skill name: {new_name} already exists: {out_skills.keys()}'
-                    logger.error(error)
-                    raise Exception(error)
-                # add
-                out_skills.update({new_name: advance})
-
-        # check if same length
-        if len(in_skills) != len(out_skills):
-            error = f'{pre_desc}Length of input ({len(in_skills)}) != length of output ({len(out_skills)})'
-            logger.error(error)
-            raise Exception(error)
-
-        return out_skills
     def add_skills(self, in_skills):
         """
         :param in_skills:     {skill_name: advance_value}
@@ -1145,76 +1478,56 @@ class NpcSingleton(object):
             [_, _, stat_total] = self.attributes[stat_str]  # [base, advance, total]
             skill_total = stat_total + skill_advances
             self.skills_basic.update({skill_name: [stat_str, stat_total, skill_advances, skill_total]})
-
         for skill_name, [stat_str, stat_total, skill_advances, skill_total] in self.skills_advanced.items():
             [_, _, stat_total] = self.attributes[stat_str]  # [base, advance, total]
             skill_total = stat_total + skill_advances
             self.skills_advanced.update({skill_name: [stat_str, stat_total, skill_advances, skill_total]})
-
-        # filter only skills with at least 1 advance
-        #out2 = {}
-        #for skill_name, values_list in out.items():
-        #    if values_list[2] > 0:
-        #        out2.update({skill_name: values_list})
-        #self.skills_advanced = out2
-        #if len(found_total) != len(self._SkillNames): logger.debug("Not all skills were found", 'FOUND:', found_total, 'ALL:', self._SkillNames)
-
-    @staticmethod
-    def parse_talent_words(in_talents):
+    def can_add_talents(self, in_talents):
         """
-        :param in_talents:     [(talent_name, advance), ...]
-        :return: out_talents:  {talent_name: advance_value}
+        :param in_talents:              {talent_name: advance}
+        :return f_success, reason       boolean, str
         """
-        from functions import random_pick, roll1d100
-        from constants import talents_random, talents_all
-        pre_desc = f'NpcSingleton.parse_talent_words: '
+        from constants import talents_all
+        pre_desc = f'NpcSingleton.can_add_talents: '
+        f_success = True
+        reason = ''
 
-        in_talents_names = [name for name, advance in in_talents]
-        out_talents = {}    # {talent_name: advance_value}
-        for talent_name, advance in in_talents:
-            name = talent_name
-            # sth " or " sth
-            if name.find(" or ") >= 0:
-                two_talents = name.split(" or ")
-                # unique!
-                choose_list = list(set(two_talents) - set(in_talents_names) - set(out_talents.keys()))
-                name = random_pick(choose_list)  # pick one from two talents
+        # check if input is unique
+        if len(set(in_talents.keys())) != len(in_talents.keys()):
+            f_success = False
+            reason = f'{pre_desc}Input names are not unique: {in_talents.keys()})'
+            return f_success, reason
 
-            # Random
-            if name == "Random":
-                # unique!
-                choose_list = list(set(talents_random) - set(in_talents_names) - set(out_talents.keys()))
-                name = random_pick(choose_list)
+        for talent_name, advance in in_talents.items():
+            # talent already exists
+            if talent_name in self.talents.keys():
+                test, current_advance, description = self.talents[talent_name]
+                limit, test, description, _ = talents_all[talent_name] # ["Bonus I", "Perception", "Perception test...", ["Vision", "Taste"]]
+                if limit.isdecimal():
+                    max_advance = int(limit)
+                elif limit.find('Bonus') >= 0:
+                    stat_name = limit[6:]
+                    _, _, total = self.attributes[stat_name]     # base, advance, total
+                    stat_bonus_val = total // 10
+                    max_advance = stat_bonus_val
+                else:
+                    error = f'{pre_desc}Unknown talent max value: {limit}'
+                    logger.error(error)
+                    raise Exception(error)
 
-            # (Any one)
-            if name.find("(Any one)") >= 0:
-                short_name = name[:name.find('(Any one)') - 1]
-                [_, _, _, list_of_choices] = talents_all[short_name]  # ["Bonus I", "Perception", "Perception test...", ["Vision", "Taste"]]
-                # unique!
-                choose_list = list(set([short_name + ' (' + choice_name + ')' for choice_name in list_of_choices]) -
-                                   set(in_talents_names) - set(out_talents.keys()))
-                name = random_pick(choose_list)
+                # reached max value?
+                if current_advance + advance > max_advance:
+                    f_success = False
+                    reason = f'{pre_desc}Maximal advance already reached: {current_advance}/{max_advance})'
+                    return f_success, reason
 
-            # check if unique
-            if name in out_talents.keys():
-                error = f'{pre_desc}Parsed talent name ({name}) already exists ({out_talents.keys()})'
-                logger.error(error)
-                raise Exception(error)
-            # add
-            out_talents.update({name: advance})
-
-        # check if same length
-        if len(in_talents) != len(out_talents):
-            error = f'{pre_desc}Length of input ({len(in_talents)}) != length of output ({len(out_talents)})'
-            logger.error(error)
-            raise Exception(error)
-
-        return out_talents
+        # no problems
+        return f_success, reason
     def add_talents(self, in_talents):
         """
         :param in_talents:     {talent_name: advance}
         Note: only unique names allowed!
-        Note: only new talents will be added!
+        Note: if talent name already exists -> increase advance value
         """
         from constants import talents_all
         pre_desc = f'NpcSingleton.add_talents: '
@@ -1226,68 +1539,212 @@ class NpcSingleton(object):
             raise Exception(error)
 
         for talent_name, advance in in_talents.items():
-            if talent_name not in self.talents.keys():
+            # talent already exists? -> increase advance value
+            if talent_name in self.talents.keys():
+                test, current_advance, description = self.talents[talent_name]
+                current_advance += advance
+                self.talents.update({talent_name: (test, current_advance, description)})
+            # create new entry
+            else:
                 short_name = talent_name.split(' (')[0]
                 [_, test, description, _] = talents_all[short_name]  # ["Bonus I", "Perception", "Perception test...", ["Vision", "Taste"]]
-                self.talents.update({talent_name: (test, advance, description)})  # {talent_name: (test, advance, description)}
-    def modify_stats_by_talents(self, in_talents):
+                self.talents.update({talent_name: (test, advance, description)})
+    def modify_stats_for_new_talents(self, in_talents):
         """
         :param in_talents: {talent_name: advance_value}
-        Note: only for the new ones
+        Note: stats will be updated every time! No restrictions!
         """
-        # add values to base stats
-        # done for talents with max advance==1
         for talent_name, talent_advance in in_talents.items():
-            if talent_advance > 0 and talent_name not in self.talents.keys():
-                if talent_name == "Coolheaded":
-                    # WP+5
-                    [base, advance, total] = self.attributes['WP']  # {stat_name: [base, advance, total]}
-                    self.attributes.update({'WP': [base+5, advance, total]})
-                elif talent_name == "Fleet footed":
-                    # MoveSpeed+1
-                    [base, advance, total] = self.attributes['MoveSpeed']
-                    self.attributes.update({'MoveSpeed': [base+1, advance, total]})
-                elif talent_name == "Lightning Reflexes":
-                    # AG+5
-                    [base, advance, total] = self.attributes['AG']
-                    self.attributes.update({'AG': [base+5, advance, total]})
-                elif talent_name == "Marksman":
-                    # BS+5
-                    [base, advance, total] = self.attributes['BS']
-                    self.attributes.update({'BS': [base+5, advance, total]})
-                elif talent_name == "Nimble Fingered":
-                    # DEX+5
-                    [base, advance, total] = self.attributes['DEX']
-                    self.attributes.update({'DEX': [base+5, advance, total]})
-                elif talent_name == "Savvy":
-                    # INT+5
-                    [base, advance, total] = self.attributes['INT']
-                    self.attributes.update({'INT': [base+5, advance, total]})
-                elif talent_name == "Sharp":
-                    # I+5
-                    [base, advance, total] = self.attributes['I']
-                    self.attributes.update({'I': [base+5, advance, total]})
-                elif talent_name == "Suave":
-                    # FEL+5
-                    [base, advance, total] = self.attributes['FEL']
-                    self.attributes.update({'FEL': [base+5, advance, total]})
-                elif talent_name == "Very Resilient":
-                    # T+5
-                    [base, advance, total] = self.attributes['T']
-                    self.attributes.update({'T': [base+5, advance, total]})
-                elif talent_name == "Very Strong":
-                    # S+5
-                    [base, advance, total] = self.attributes['S']
-                    self.attributes.update({'S': [base+5, advance, total]})
-                elif talent_name == "Warrior Born":
-                    # WS+5
-                    [base, advance, total] = self.attributes['WS']
-                    self.attributes.update({'S': [base+5, advance, total]})
+            if talent_name == "Coolheaded":
+                # WP+5
+                [base, advance, total] = self.attributes['WP']  # {stat_name: [base, advance, total]}
+                self.attributes.update({'WP': [base+5, advance, total]})
+            elif talent_name == "Fleet footed":
+                # MoveSpeed+1
+                [base, advance, total] = self.attributes['MoveSpeed']
+                self.attributes.update({'MoveSpeed': [base+1, advance, total]})
+            elif talent_name == "Lightning Reflexes":
+                # AG+5
+                [base, advance, total] = self.attributes['AG']
+                self.attributes.update({'AG': [base+5, advance, total]})
+            elif talent_name == "Marksman":
+                # BS+5
+                [base, advance, total] = self.attributes['BS']
+                self.attributes.update({'BS': [base+5, advance, total]})
+            elif talent_name == "Nimble Fingered":
+                # DEX+5
+                [base, advance, total] = self.attributes['DEX']
+                self.attributes.update({'DEX': [base+5, advance, total]})
+            elif talent_name == "Savvy":
+                # INT+5
+                [base, advance, total] = self.attributes['INT']
+                self.attributes.update({'INT': [base+5, advance, total]})
+            elif talent_name == "Sharp":
+                # I+5
+                [base, advance, total] = self.attributes['I']
+                self.attributes.update({'I': [base+5, advance, total]})
+            elif talent_name == "Suave":
+                # FEL+5
+                [base, advance, total] = self.attributes['FEL']
+                self.attributes.update({'FEL': [base+5, advance, total]})
+            elif talent_name == "Very Resilient":
+                # T+5
+                [base, advance, total] = self.attributes['T']
+                self.attributes.update({'T': [base+5, advance, total]})
+            elif talent_name == "Very Strong":
+                # S+5
+                [base, advance, total] = self.attributes['S']
+                self.attributes.update({'S': [base+5, advance, total]})
+            elif talent_name == "Warrior Born":
+                # WS+5
+                [base, advance, total] = self.attributes['WS']
+                self.attributes.update({'WS': [base+5, advance, total]})
+            elif talent_name.find('Arcane Magic') >= 0:
+                # fill self.arcane and self.spells
+                arcane_str = talent_name[talent_name.find('(') + 1: talent_name.find(')')]
+                self.arcane = arcane_str
+                self.spells.update({'Arcane': {}})
+                self.spells.update({self.arcane: {}})
 
         # update attributes
         self.update_attributes()
+    def parse_spells(self, in_spells):
+        """
+        :param in_spells:     {spell_name: SpellClass, ...}
+        :return: out_spells:  {spell_name: SpellClass, ...}
+        """
+        from spells import SpellClass
+        pre_desc = f'NpcSingleton.parse_spells: '
+
+        # {stat_name: [base, advance, total]}
+        stat_values = {
+            "WS": self.attributes['WS'][2],
+            "BS": self.attributes['BS'][2],
+            "S": self.attributes['S'][2],
+            "T": self.attributes['T'][2],
+            "AG": self.attributes['AG'][2],
+            "I": self.attributes['I'][2],
+            "DEX": self.attributes['DEX'][2],
+            "INT": self.attributes['INT'][2],
+            "WP": self.attributes['WP'][2],
+            "FEL": self.attributes['FEL'][2],
+
+            "bWS":  self.attributes['WS'][2]//10,
+            "bBS":  self.attributes['BS'][2]//10,
+            "bS":   self.attributes['S'][2]//10,
+            "bT":   self.attributes['T'][2]//10,
+            "bAG":  self.attributes['AG'][2]//10,
+            "bI":   self.attributes['I'][2]//10,
+            "bDEX": self.attributes['DEX'][2]//10,
+            "bINT": self.attributes['INT'][2]//10,
+            "bWP":  self.attributes['WP'][2]//10,
+            "bFEL": self.attributes['FEL'][2]//10
+        }
+
+        out_spells = {}     # {spell_name: SpellClass, ...}
+        for spell_name, spell_obj in in_spells.items():
+            out_values = []     # [cn, _range, target, duration, description]
+            for val_str in [spell_obj.cn, spell_obj._range, spell_obj.target, spell_obj.duration, spell_obj.description]:
+                # separate to words
+                splits = val_str.split(' ')
+                out_splits = []
+                for split in splits:
+                    idx_start = split.find('[')
+                    idx_end = split.find(']')
+                    # extract wanted string from word
+                    if idx_start >= 0 and idx_end >=0 and idx_start < idx_end:
+                        inner_str = split[idx_start+1: idx_end]
+                        attribute_or_bonus_str = [val for val in re.findall('[a-z,A-Z]*', inner_str) if len(val) > 0][0]
+                        # e.g. [WP], [bWP]
+                        try:
+                            dec_value = stat_values[attribute_or_bonus_str]
+                        except KeyError:
+                            error = f'{pre_desc}Found string:"{attribute_or_bonus_str}" does not include information about npc attibute or it\'s bonus.'
+                            logger.error(error)
+                            raise Exception(error)
+                        # e.g. [bWP+2]
+                        if len(re.findall('\+[0-9]',inner_str)) > 0:
+                            dec_value += int(re.findall('[0-9]', inner_str)[0])
+                        # parse
+                        out_splits.append(split[:idx_start] + str(dec_value) + split[idx_end+1:])
+                    else:
+                        out_splits.append(split)
+                out_values.append(' '.join(out_splits))
+            # add
+            out_spells.update({spell_name: SpellClass(out_values[0], out_values[1], out_values[2], out_values[3], out_values[4])})
+
+        return out_spells
+    def parse_prayers(self, in_prayers):
+        """
+        :param   in_prayers:     {spell_name: PrayerClass, ...}
+        :return: out_prayers:    {spell_name: PrayerClass, ...}
+        """
+        from prayers import PrayerClass
+        pre_desc = f'NpcSingleton.parse_prayers: '
+
+        # {stat_name: [base, advance, total]}
+        stat_values = {
+            "WS": self.attributes['WS'][2],
+            "BS": self.attributes['BS'][2],
+            "S": self.attributes['S'][2],
+            "T": self.attributes['T'][2],
+            "AG": self.attributes['AG'][2],
+            "I": self.attributes['I'][2],
+            "DEX": self.attributes['DEX'][2],
+            "INT": self.attributes['INT'][2],
+            "WP": self.attributes['WP'][2],
+            "FEL": self.attributes['FEL'][2],
+
+            "bWS":  self.attributes['WS'][2]//10,
+            "bBS":  self.attributes['BS'][2]//10,
+            "bS":   self.attributes['S'][2]//10,
+            "bT":   self.attributes['T'][2]//10,
+            "bAG":  self.attributes['AG'][2]//10,
+            "bI":   self.attributes['I'][2]//10,
+            "bDEX": self.attributes['DEX'][2]//10,
+            "bINT": self.attributes['INT'][2]//10,
+            "bWP":  self.attributes['WP'][2]//10,
+            "bFEL": self.attributes['FEL'][2]//10
+        }
+
+        out_prayers = {}     # {name: PrayerClass, ...}
+        for prayer_name, prayer_obj in in_prayers.items():
+            out_values = []     # [_range, target, duration, description]
+            for val_str in [prayer_obj._range, prayer_obj.target, prayer_obj.duration, prayer_obj.description]:
+                # separate to words
+                splits = val_str.split(' ')
+                out_splits = []
+                for split in splits:
+                    idx_start = split.find('[')
+                    idx_end = split.find(']')
+                    # extract wanted string from word
+                    if idx_start >= 0 and idx_end >=0 and idx_start < idx_end:
+                        inner_str = split[idx_start+1: idx_end]
+                        attribute_or_bonus_str = [val for val in re.findall('[a-z,A-Z]*', inner_str) if len(val) > 0][0]
+                        # e.g. [WP], [bWP]
+                        try:
+                            dec_value = stat_values[attribute_or_bonus_str]
+                        except KeyError:
+                            error = f'{pre_desc}Found string:"{attribute_or_bonus_str}" does not include information about npc attibute or it\'s bonus.'
+                            logger.error(error)
+                            raise Exception(error)
+                        # e.g. [bWP+2]
+                        if len(re.findall('\+[0-9]',inner_str)) > 0:
+                            dec_value += int(re.findall('[0-9]', inner_str)[0])
+                        # parse
+                        out_splits.append(split[:idx_start] + str(dec_value) + split[idx_end+1:])
+                    else:
+                        out_splits.append(split)
+                out_values.append(' '.join(out_splits))
+            # add
+            out_prayers.update({prayer_name: PrayerClass(out_values[0], out_values[1], out_values[2], out_values[3])})
+
+        return out_prayers
 
     def final_modifications(self):
+        from constants import skills_all
+        from functions import random_pick
+        from prayers import blessings_by_god, miracles_by_god
         pre_desc = f'NpcSingleton.final_modifications: '
 
         # Modify by talent description
@@ -1310,25 +1767,40 @@ class NpcSingleton(object):
 
             # Artistic: Add Trade (Artist) to any career
             elif talent_name == "Artistic":
-                self.add_skills({"Trade (Artist)": talent_advance})
+                self.add_skills({"Trade (Artist)": 1})
 
             # Craftsman: Add Trade (Any one) to any career
             elif talent_name == "Craftsman":
-                in_skills = {"Trade (Any one)": talent_advance}
-                in_skills = self.parse_skill_words(in_skills)
-                self.add_skills(in_skills)
+                # parse
+                skill_name = "Trade (Any one)"
+                short_name = skill_name[:skill_name.find('(Any one)') - 1]
+                # choose one
+                _, _, list_of_choices = skills_all[short_name]
+                new_name = random_pick(list(set([short_name + ' (' + choice_name + ')' for choice_name in list_of_choices])))
+                self.add_skills({new_name: 1})
 
             # Perfect Pitch: Add Performer (Sing) to any career
             elif talent_name == "Perfect Pitch":
-                self.add_skills({"Entertain (Sing)": talent_advance})
+                self.add_skills({"Entertain (Sing)": 1})
 
             # Seasoned Traveller: Add Lore (Local) to any career
             elif talent_name == "Seasoned Traveller":
-                self.add_skills({"Lore (Local)": talent_advance})
+                self.add_skills({"Lore (Local)": 1})
 
             # Witch!:   Add Language (Magick) to any career
             elif talent_name == "Witch!":
-                self.add_skills({"Language (Magick)": talent_advance})
+                self.add_skills({"Language (Magick)": 1})
+
+            # Bless:   Add god, blessings
+            elif talent_name.find("Bless") >= 0:
+                self.god = talent_name[talent_name.index('(')+1: talent_name.index(')')]
+                self.blessings = blessings_by_god[self.god]
+
+            # Invoke:   Add god, miracles
+            elif talent_name.find("Invoke") >= 0:
+                if self.god is None:
+                    self.god = talent_name[talent_name.index('(')+1: talent_name.index(')')]
+                self.miracles = miracles_by_god[self.god]
 
             # talent_description includes: [lvl] or [lvl*number]
             lvl_idx = talent_description.find('[lvl')
@@ -1343,7 +1815,7 @@ class NpcSingleton(object):
                     lvl_str = talent_description[lvl_idx: end_idx+1]
                     talent_description = talent_description.replace(lvl_str, str(talent_advance*val))
                 else:
-                    error = f'{pre_desc}Talent description includes not handled "lvl" string -> {talent_description}'
+                    error = f'{pre_desc}Talent description includes not handled "[lvl]" string -> {talent_description}'
                     logger.error(error)
                     raise Exception(error)
                 # modify
@@ -1386,6 +1858,19 @@ class NpcSingleton(object):
         if len(to_delete):
             logger.debug(f'\t\tremoved skills (advance value == 0): {to_delete}')
 
+        # Parse spells to include attributes values
+        if 'Petty' in self.spells.keys():
+            self.spells['Petty'] = self.parse_spells(self.spells['Petty'])
+        if 'Arcane' in self.spells.keys():
+            self.spells['Arcane'] = self.parse_spells(self.spells['Arcane'])
+        if self.arcane is not None:
+            self.spells[self.arcane] = self.parse_spells(self.spells[self.arcane])
+
+        # Parse prayers to include attributes values
+        if self.blessings is not None:
+            self.blessings = self.parse_prayers(self.blessings)
+        if self.miracles is not None:
+            self.miracles = self.parse_prayers(self.miracles)
 
 # function "present" -> obsolete, not used
 """

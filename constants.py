@@ -169,7 +169,7 @@ talents_all = {
     "Alley Cat": ["Bonus I", "Stealth (Urban)", "Reverse dice of any failed test to check success.", []],
     "Ambidextrous": ["2", "WS", "Off hand -10. (0 if taken twice).", []],
     "Animal Affinity": ["Bonus WP", "Charm Animal", "All Bestial Trait creatures calm in your presence.", []],
-    "Arcane Magic": ["1", "Spell", "Know one of Lores of magic.", ["Beasts", "Death", "Fire", "Heavens", "Metal", "Shadow", "Light", "Life", "Hedgecraft", "Necromancy"]],
+    "Arcane Magic": ["1", "Spell", "Know one of Lores of magic.", ["Beasts", "Death", "Fire", "Heavens", "Metal", "Life", "Light", "Shadow", "Hedgecraft", "Witchcraft"]],
     "Argumentative": ["Bonus FEL", "Charm (Debating)", "Choose either rolled SL or number rolled on units die.", []],
     "Artistic": ["Bonus DEX", "Trade (Artist)", "Produce precise sketches. Add Trade (Artist) to any career.", []],
     "Attractive": ["Bonus FEL", "Charm", "Choose either rolled SL or number rolled on units die.", []],
@@ -333,7 +333,8 @@ talents_all = {
     "Waterman": ["Bonus AG", "Sail", "Ignore negatives to tests when on a barge.", []],
     "Wealthy": ["1", "Earning", "When earning you secure [lvl] Gold Coins.", []],
     "Well-prepared": ["Bonus I", "", "You may pull the trapping required for any situation provided it has Encumbrance of 0.", []],
-    "Witch!": ["Bonus WP", "", "Add Language (Magick) to any career. For 1 Resilience point you may manifest a spell from any Arcane Lore [lvl] times."]}
+    "Witch!": ["Bonus WP", "", "Add Language (Magick) to any career. For 1 Resilience point you may manifest a spell from any Arcane Lore [lvl] times.", []]}
+
 
 # ---- Other
 thy_demise = ["thy death", "thy demise", "thy destruction", "thy dying", "thy doom", "thy downfall", "thine end", "thy fall"]
