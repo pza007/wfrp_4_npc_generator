@@ -11,8 +11,7 @@ Generate random Non Player Character (NPC) in the world of WARHAMMER Fantasy Rol
 [Overview]: #getting_started
 1. Run ...\standalone_exe\main.exe file.
 2. Provide user inputs.
-3. Preview pop-up image and close the window.
-4. Enjoy the output file: npc.png (placed in main.exe directory).
+3. Enjoy the output file(s): *.png (placed in main.exe directory).
 
 ## Used libraries ##
 - requests: fetch data from web-page (e.g. generated npc's appearance)
@@ -24,6 +23,7 @@ Generate random Non Player Character (NPC) in the world of WARHAMMER Fantasy Rol
 
 ## Report bugs ##
 [Open Issue directly][] - note that you need a GitHub account.
+- Please provide log_file.log together with issue description to speed up the process of fixing problem. File can be found in main.exe directory.
 
 ## Contact ##
 By email: przemyslaw.zawadzki@hotmail.com
