@@ -6,6 +6,7 @@
 ## Overview ##
 [Overview]: #overview
 Generate random Non Player Character (NPC) in the world of WARHAMMER Fantasy Roleplay 4th edition.
+<img src="https://github.com/pza007/wfrp_4_npc_generator/blob/main/standalone_exe/Wizard__Walter_von_Magenberg.png" width="394" height="306"> <img src="https://github.com/pza007/wfrp_4_npc_generator/blob/main/standalone_exe/Wizard__Walter_von_Magenberg_spells.png" width="394" height="312">
 
 ## Getting started ##
 [Overview]: #getting_started
