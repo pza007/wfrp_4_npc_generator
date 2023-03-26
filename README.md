@@ -8,6 +8,15 @@
 Generate random Non Player Character (NPC) in the world of WARHAMMER Fantasy Roleplay 4th edition.
 <img src="https://github.com/pza007/wfrp_4_npc_generator/blob/main/standalone_exe/Wizard__Walter_von_Magenberg.png" width="394" height="306"> <img src="https://github.com/pza007/wfrp_4_npc_generator/blob/main/standalone_exe/Wizard__Walter_von_Magenberg_spells.png" width="394" height="312">
 
+## Features ##
+- choice of preffered species, age, class, career and experience point of your NPC or ... just randomize it :)
+- randomly generated appearance, traits and reactions
+- automatic advance of attributes, basic and advanced skills, talents and trapping
+- continous advance, even after reaching career level 4, until all experience points are used
+- character sheet in WFRP theme, including images and all necessary character's information
+- additional sheet with spells/blessings and their descriptions, for characters with magic/religious abilities
+- logging of program's execution, to improve future bug fixing
+
 ## Getting started ##
 [Overview]: #getting_started
 1. Run ...\standalone_exe\main.exe file.
